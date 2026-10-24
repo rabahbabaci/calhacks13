@@ -118,3 +118,64 @@ Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fi
 - Result: 15 of 16 valid. Skipped CDC "Controlling Asthma" tagged cockroaches: only 2 cockroach mentions, real page but wrong topic. Passing rows go to data/urls_valid.csv.
 - Coverage: every hazard except gas_leak (expected, urgent-only). Cockroaches has just one source (EPA asthma triggers). No CDPH, HUD or WHO sources yet, so nothing California-specific.
 - Gov sites can block Python's default user agent, so the validator sends a browser user agent.
+
+## Health agent (Rabah)
+
+Agent #2, Medical & Environmental Health. Code in `agents/health/`. Built Sat 10:10 to 10:30 AM PT.
+
+**Gate (12:30 PM): PASS at 10:30 AM.** 9/9 evals pass against the live corpus, one real assessment saved to `health_assessment` and read back with the full payload, everything pushed (see git log, commit "health: prompt fix and findings").
+
+### How to use it
+
+```python
+import sys; sys.path.insert(0, "agents/health")
+from agent import assess_case
+result = assess_case(case, save=True)   # case = contracts.md section 3 object, optional "notes" string
+```
+
+- `result["assessments"]`: one section 5 object per assessed hazard. Urgent hazards have the same shape with empty claim lists.
+- `result["not_assessed"]`: `[{"hazard", "reason"}]` for hazards skipped (confidence under 0.5 and not confirmed by tenant, or no corpus).
+- `result["dropped"]`: every claim the validator removed, with the reason. Useful for debugging, do not show to tenants.
+- `result["usage"]`: tokens, call count and seconds per hazard.
+- CLI: `data/.venv/bin/python agents/health/agent.py agents/health/cases/mold_basic.json [--no-save]`
+- Evals: `data/.venv/bin/python agents/health/evals.py [a b ...]`. Writes `agents/health/out/evals.json`. No rows saved.
+- Needs `ANTHROPIC_API_KEY` in the root `.env` and the `anthropic` package (2.3.0) in `data/.venv`. SpacetimeDB must be up (`spacetime start`).
+
+### Design
+
+1. Urgent check first, no LLM. `exposed_wiring`, `carbon_monoxide`, `gas_leak` return a fixed message (leave, call 911, PG&E gas line 1-877-660-6789 from pge.com). 0.0s.
+2. Confidence under 0.5 and not confirmed by tenant is skipped before any retrieval.
+3. Tool-use loop on `claude-sonnet-5-5` with two tools: `search_sources(hazard)` returns every chunk for the hazard (corpus is 110 chunks, no vector DB needed), `save_assessment` receives the draft. Two API calls per hazard, every time.
+4. Validator in code, after the model: a claim is dropped if its `chunk_ids` are missing, empty, or not in the retrieved set, or if it uses a banned term for the hazard (rodents: hantavirus). `sources` is rebuilt from the chunks actually cited, so a link can only come from a retrieved source. The reducer save happens only after validation.
+5. Household flags go into the prompt as emphasis only. Case notes are passed but the prompt forbids mentioning the tenant, household or notes in any claim.
+
+### What worked
+
+- First real run: 19 claims, all cited, 0 dropped, 3 sources (CDC, EPA, CDPH) on dampness_mold. 13.4s, 9.8k in / 1.8k out.
+- `health_assessment` persistence confirmed with a real row (id 1, case_health_001). Note for #5: `created_at` comes back from SQL as a one-element array of microseconds, e.g. `[1792862222185738]`.
+- The code validator caught a real one: on rodents the model wrote "If you suspect hantavirus disease, see a physician..." cited to a real chunk. Dropped as a banned term; the general care-seeking line survived. Prompt rules alone would not have guaranteed this.
+- Lead paint with children=true leads vulnerable_groups with children under 6, cited.
+- Thin corpora behave: cockroaches gives 6 claims from 3 chunks, all cited to the same chunk.
+
+### What broke, and the fix
+
+- Eval b failed first: the model put its refusal inside a claim ("cannot say what is causing any symptom in your child") and cited chunk 8, which says nothing like that. Fix: prompt rule that claims never mention the tenant, household, children or notes, and never contain a refusal or disclaimer. Pass after.
+- Eval h failed first: 11 claims from a 3-chunk corpus, all honestly cited to chunk 44, but padded (five one-line precautions from one paragraph). Fix: prompt rule capping output at 6 claims when fewer than 5 chunks come back. Pass after.
+- `data/stdb.py` raises `urllib.error.URLError` when the server is down, not `StdbError`. The agent wraps both into `DataLayerDown`.
+- SpacetimeDB SQL has no GROUP BY. Count in Python.
+- `git pull --rebase` refuses with unstaged edits, and `git stash pop` restores modified files unstaged, so a commit after it can silently skip them (that happened to agent.py at 3e3fac7, fixed in the next commit). Use `git pull --rebase --autostash` instead, then add, commit, push.
+
+### Cost, latency, limits
+
+- Full eval run (6 LLM hazards, 10 API calls): 46.0k input tokens, 7.1k output tokens, about 9 to 13 seconds per LLM hazard, 0.0s for urgent and skipped. One hazard is roughly 8 to 12k input tokens because the whole hazard corpus goes into context; lead_paint (27 chunks) is the largest at 12.5k. At Sonnet list pricing that is in the range of 5 cents per hazard; check the Console usage page for the exact figure.
+- A full case with 3 non-urgent hazards is about 30 to 40 seconds sequential. If the UI needs it faster, run hazards in parallel threads; nothing in the agent is shared state.
+- Eval e uses an invented tag `asbestos` to hit the no-corpus path, because every contract hazard either has a corpus or is urgent. The reducer would reject that tag on save, which is fine since evals never save.
+- Model output is not deterministic. 9/9 passed twice in a row after the prompt fix; rerun evals after any prompt change.
+- The hantavirus ban is a per-hazard term list in `agent.BANNED_TERMS`. Extend it if other hazards need the same guard.
+- Not covered yet: a `notes` field is not in contracts.md section 3. If the team wants it, Divit should add it to the contract. The agent treats it as optional.
+
+### Next
+
+- Team sync: decide whether `notes` enters the contract, and how #5 consumes `not_assessed` and `dropped`.
+- Parallelize hazards if latency matters for the demo.
+- Rerun evals after the data layer adds the dedicated cockroach and electrical sources.
