@@ -2,7 +2,7 @@
 
 Running log for the SpacetimeDB module and the health corpus ingest. Updated with every commit from this workstream.
 
-## Status (Sat Oct 24, 9:47 AM PT)
+## Status (Sat Oct 24, 9:52 AM PT)
 
 | Item | State |
 |---|---|
@@ -10,9 +10,11 @@ Running log for the SpacetimeDB module and the health corpus ingest. Updated wit
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
 | urls.csv validation | Done: 16 of 17 valid, 8 hazards covered (no gas_leak) |
 | Corpus ingest (Apify) | Done: 15 sources, 110 chunks, all 8 gate hazards |
-| Persistence after restart | Not tested |
+| Persistence after restart | PASS: server stopped and restarted, identical row counts and hashes |
 
 Gate by 11:30 AM: corpus loaded for every hazard except gas_leak, persistence confirmed, stdb.py working, all pushed.
+
+**Gate: PASS at 9:50 AM.**
 
 ## How to use it
 
@@ -91,9 +93,22 @@ Result in the database (sources / chunks):
 
 Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fix later with a dedicated cockroach page and an indoor electrical safety page (or a browser crawl of the CDC electrical page). Only one California source so far.
 
+### Step 5: persistence (9:48 to 9:51)
+- `python3 data/fingerprint.py` prints row counts plus a hash of every row for all three tables.
+- Fingerprinted, stopped the server with Ctrl+C (ping: connection refused), ran `spacetime start`, fingerprinted again. Identical: 15 sources, 110 chunks, 0 assessments, same hashes.
+- Data lives in ~/.local/share/spacetime/data (15 MB). Caveat: health_assessment was empty during the test. Same database and storage, but only sources and chunks were proven with real rows.
+
+## Next (after the gate)
+- Team sync decision: how other laptops reach the database (LAN listen or publish to maincloud). See the open question above.
+- Add a dedicated cockroach source and an indoor electrical safety source. Each of those hazards rests on one multi-topic page right now.
+- More California sources (CDPH, HUD Healthy Homes) for the Oakland + California pack.
+
 ## Limits, cost, time
 
-- Time so far: about 1 hour (8:50 to 9:47).
+- Time: about 1 hour (8:50 to 9:52), all six steps.
+- `spacetime call`, `sql` and `describe` print an UNSTABLE warning on every run. They work, but the CLI output format could change.
+- There is no delete reducer (none in the contract). The only way to wipe is `spacetime publish --delete-data=always`, which clears all three tables, including health_assessment. Do not run it once other agents are saving assessments.
+- The database runs on one laptop. If that laptop sleeps or the server tab closes, everyone loses reads until it restarts. The data survives (step 5), and `ingest.py --from-cache` rebuilds it anywhere in about 10 seconds.
 - Apify: 2 crawl runs of 15 to 16 pages, $0.0048 and $0.0046, free plan. Reloads from cache cost nothing.
 - SpacetimeDB: $0, local.
 
