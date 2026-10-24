@@ -8,7 +8,7 @@ Running log for the SpacetimeDB module and the health corpus ingest. Updated wit
 |---|---|
 | SpacetimeDB module `home` | Live on Rabah's laptop, schema matches docs/contracts.md section 4 |
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
-| urls.csv validation | Not started |
+| urls.csv validation | Done: 15 of 16 valid, 8 hazards covered (no gas_leak) |
 | Corpus ingest (Apify) | Not started |
 | Persistence after restart | Not tested |
 
@@ -66,3 +66,10 @@ Broke or surprised us:
 
 - Time so far: about 25 minutes.
 - Cost so far: $0, everything is local.
+
+### Step 3: validate urls.csv (9:13 to 9:17)
+- Moved urls.csv to data/urls.csv (repo root is outside this workstream's folders).
+- data/validate_urls.py checks: required fields, hazard tag in contract list, publisher allowed, https, host matches publisher domain (cdc.gov, cdph.ca.gov, epa.gov, hud.gov, who.int), no duplicates, HTTP 200 without leaving the domain, and a relevance check (at least 3 hazard keyword hits in the page text).
+- Result: 15 of 16 valid. Skipped CDC "Controlling Asthma" tagged cockroaches: only 2 cockroach mentions, real page but wrong topic. Passing rows go to data/urls_valid.csv.
+- Coverage: every hazard except gas_leak (expected, urgent-only). Cockroaches has just one source (EPA asthma triggers). No CDPH, HUD or WHO sources yet, so nothing California-specific.
+- Gov sites can block Python's default user agent, so the validator sends a browser user agent.

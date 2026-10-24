@@ -1,0 +1,17 @@
+url,title,publisher,hazard,last_updated
+https://www.cdc.gov/mold-health/about/index.html,"Mold",CDC,dampness_mold,2024-09-26
+https://www.epa.gov/mold/can-mold-cause-health-problems,"Can mold cause health problems?",EPA,dampness_mold,unknown
+https://www.epa.gov/mold/brief-guide-mold-moisture-and-your-home,"A Brief Guide to Mold, Moisture and Your Home",EPA,water_leak,2026-02-18
+https://www.epa.gov/mold/mold-cleanup-your-home,"Mold Cleanup in Your Home",EPA,water_leak,2026-06-04
+https://www.cdc.gov/healthy-pets/rodent-control/clean-up.html,"How to Clean Up After Rodents",CDC,rodents,2024-04-08
+https://www.cdc.gov/hantavirus/about/index.html,"About Hantavirus",CDC,rodents,2024-05-13
+https://www.epa.gov/asthma/asthma-triggers-gain-control,"Asthma Triggers: Gain Control",EPA,cockroaches,2026-07-06
+https://www.cdc.gov/asthma/control/index.html,"Controlling Asthma",CDC,cockroaches,2024-01-11
+https://www.epa.gov/lead/reduce-risk-lead-exposure-home,"Reduce the Risk of Lead Exposure at Home",EPA,lead_paint,2026-10-05
+https://www.cdc.gov/lead-prevention/about/index.html,"About Childhood Lead Poisoning Prevention",CDC,lead_paint,2025-08-21
+https://www.cdc.gov/winter-weather/prevention/index.html,"Preventing Hypothermia",CDC,inadequate_heat,2024-01-30
+https://www.cdc.gov/winter-weather/safety/stay-safe-during-after-a-winter-storm-safety.html,"Safety Guidelines: During & After a Winter Storm",CDC,inadequate_heat,2026-01-26
+https://www.cdc.gov/carbon-monoxide/about/index.html,"Carbon Monoxide Poisoning Basics",CDC,carbon_monoxide,2026-01-12
+https://www.cdc.gov/natural-disasters/response/what-to-do-protect-yourself-during-a-power-outage.html,"What to Do to Protect Yourself During a Power Outage",CDC,carbon_monoxide,2024-01-26
+https://www.cdc.gov/natural-disasters/response/what-to-do-protect-yourself-from-electrical-hazards.html,"What to Do to Protect Yourself From Electrical Hazards",CDC,exposed_wiring,2024-01-25
+https://www.cdc.gov/natural-disasters/safety/index.html,"Guidelines for Cleaning Safely After a Disaster",CDC,exposed_wiring,2026-08-26
