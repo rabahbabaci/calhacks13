@@ -1,0 +1,137 @@
+{
+  "pack_id": "ca-oakland",
+  "jurisdiction": {"state": "CA", "city": "Oakland"},
+  "verified_on": "2026-10-24",
+  "verified_how": "Perplexity research against official sources (leginfo.legislature.ca.gov, oaklandca.gov, library.municode.com), spot-checked in Rab's planning chat. Open each source_url before quoting in the pitch.",
+  "disclaimer": "General legal information, not legal advice. Coverage, notice, causation and agency findings change what applies.",
+
+  "hazard_laws": [
+    {
+      "hazard": "dampness_mold",
+      "citations": [
+        {"cite": "Cal. Health & Safety Code 17920.3(a)(11)", "excerpt": "Dampness of habitable rooms.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"},
+        {"cite": "Cal. Health & Safety Code 17920.3(a)(13)", "excerpt": "Visible mold growth, as determined by a health officer or a code enforcement officer", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"},
+        {"cite": "Cal. Civil Code 1941.7(a)", "excerpt": "until the lessor has notice of the dilapidation or if the tenant is in violation of Section 1941.2.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.7"}
+      ],
+      "landlord_duty": "Dampness that endangers occupants can make a unit substandard. Mold only counts as substandard once a health or code enforcement officer determines it. The landlord's mold repair duty starts when they have notice.",
+      "tenant_options": ["Give the landlord written notice and keep proof of when and how", "Document with dated photos", "Request an Oakland code enforcement inspection", "Talk to free legal aid before using any rent remedy"],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": ["A photo or AI label is never an officer's determination", "Minor mold on surfaces meant to get wet (like a shower) is excluded", "Do not presume the tenant caused it"]
+    },
+    {
+      "hazard": "water_leak",
+      "citations": [
+        {"cite": "Cal. Civil Code 1941.1(a)(1)", "excerpt": "Effective waterproofing and weather protection of roof and exterior walls, including unbroken windows and doors.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1."},
+        {"cite": "Cal. Health & Safety Code 17920.3(e), (g)", "excerpt": "", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"}
+      ],
+      "landlord_duty": "Keep the roof, walls, windows and doors weatherproof and keep plumbing in good working order.",
+      "tenant_options": ["Give written notice", "Document source and location of the leak", "Request an inspection", "Ask legal aid about remedies"],
+      "deadline_note": "No universal repair deadline. Civil Code 1942 uses a 'reasonable time' (see general_rules).",
+      "cautions": []
+    },
+    {
+      "hazard": "rodents",
+      "citations": [
+        {"cite": "Cal. Civil Code 1941.1(a)(6)", "excerpt": "kept in every part clean, sanitary, and free from all accumulations of debris, filth, rubbish, garbage, rodents, and vermin.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1."},
+        {"cite": "Cal. Health & Safety Code 17920.3(a)(12)", "excerpt": "", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"}
+      ],
+      "landlord_duty": "Building and grounds clean and free of rodents and vermin at move-in and in areas the landlord controls. Infestations count as substandard when an authorized officer determines it.",
+      "tenant_options": ["Give written notice", "Document droppings and damage", "Request an inspection or vector control referral", "Ask legal aid about remedies"],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": ["Tenant upkeep duties and causation matter"]
+    },
+    {
+      "hazard": "cockroaches",
+      "same_as": "rodents"
+    },
+    {
+      "hazard": "exposed_wiring",
+      "citations": [
+        {"cite": "Cal. Civil Code 1941.1(a)(5)", "excerpt": "Electrical lighting, with wiring and electrical equipment that conformed with applicable law at the time of installation, maintained in good working order.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1."},
+        {"cite": "Cal. Health & Safety Code 17920.3(d)", "excerpt": "", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"}
+      ],
+      "landlord_duty": "Keep wiring and electrical equipment in good working order. Older wiring is only acceptable if it is currently safe.",
+      "tenant_options": ["Safety first (the health agent's urgent message)", "Give written notice", "Request an Oakland inspection", "Ask legal aid about remedies"],
+      "deadline_note": "No fixed repair period. Never present the 30-day presumption as a safe waiting period for dangerous wiring.",
+      "cautions": ["Civil Code 1941.3 is about locks and windows, not wiring. Do not cite it here"]
+    },
+    {
+      "hazard": "lead_paint",
+      "citations": [
+        {"cite": "Cal. Health & Safety Code 17920.10(a)", "excerpt": "is deemed to be in violation of this part as to any portion that contains lead hazards.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=HSC&sectionNum=17920.10"}
+      ],
+      "landlord_duty": "Avoid lead hazards such as deteriorated lead paint, contaminated dust or soil, or disturbing lead paint without containment.",
+      "tenant_options": ["Request a lead assessment or inspection", "Document peeling or deteriorated paint", "Ask legal aid about remedies"],
+      "deadline_note": "No general repair deadline in 17920.10.",
+      "cautions": ["Peeling paint alone does not prove lead", "Regulatory thresholds (Title 17) not verified. Do not hardcode numbers"]
+    },
+    {
+      "hazard": "inadequate_heat",
+      "citations": [
+        {"cite": "Cal. Civil Code 1941.1(a)(4)", "excerpt": "Heating facilities that conformed with applicable law at the time of installation, maintained in good working order.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1."},
+        {"cite": "Cal. Health & Safety Code 17920.3(a)(6)", "excerpt": "", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"}
+      ],
+      "landlord_duty": "Provide heating that works and keep it in good working order.",
+      "tenant_options": ["Give written notice", "File an Oakland 'No heat' complaint (OAK311 or online)", "Ask legal aid about remedies"],
+      "deadline_note": "No numeric temperature or repair deadline verified.",
+      "cautions": ["Minimum indoor temperature not verified. Do not state a number"]
+    },
+    {
+      "hazard": "carbon_monoxide",
+      "citations": [
+        {"cite": "Cal. Health & Safety Code 17926(a), 17926.1(a), (c)", "excerpt": "The carbon monoxide device shall be operable at the time that the tenant takes possession.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=HSC&sectionNum=17926"}
+      ],
+      "landlord_duty": "Install and maintain required CO alarms. The tenant reports a missing or broken alarm, and the landlord must fix reported problems.",
+      "tenant_options": ["Emergency first if CO is suspected (health agent urgent path)", "Report a missing or broken alarm to the landlord in writing", "Request an inspection"],
+      "deadline_note": "The 30-day notice-to-correct in 17926(c) is about fines, never a reason to wait on suspected CO.",
+      "cautions": ["A missing alarm is a compliance issue. It is not evidence of CO exposure"]
+    },
+    {
+      "hazard": "gas_leak",
+      "citations": [
+        {"cite": "Cal. Civil Code 1941.1(a)(2)", "excerpt": "Plumbing or gas facilities that conformed to applicable law in effect at the time of installation, maintained in good working order.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1."},
+        {"cite": "Cal. Health & Safety Code 17920.3(e), (f)", "excerpt": "", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"}
+      ],
+      "landlord_duty": "Keep gas facilities in good, safe working order.",
+      "tenant_options": ["Emergency first: leave and call PG&E or 911 (health agent urgent path)", "Afterward: written notice, inspection, legal aid"],
+      "deadline_note": "No gas-specific repair deadline verified. Never put an active leak on a repair timer.",
+      "cautions": []
+    }
+  ],
+
+  "general_rules": [
+    {"cite": "Cal. Civil Code 1941", "summary": "General duty to repair conditions that make a unit untenantable.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941"},
+    {"cite": "Cal. Civil Code 1942", "summary": "Repair-and-deduct or move out, only after notice and landlord neglect. Capped at one month's rent, no more than twice in 12 months. 30 days after notice is presumed reasonable, but it is not a universal deadline.", "show_as": "legal_aid_question", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942"},
+    {"cite": "Cal. Civil Code 1942.4", "summary": "Limits on collecting rent only when an official inspection found the problem, an officer gave written notice, and it stayed unfixed 35 days after that official notice. The 35 days run from the officer's notice, not the tenant's letter.", "show_as": "legal_aid_question", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.4"},
+    {"cite": "Cal. Civil Code 1942.5", "summary": "Protection against retaliation for up to 180 days after a repair request, complaint or inspection, with conditions. Not blanket protection from eviction.", "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.5"}
+  ],
+
+  "city_procedures": [
+    {"name": "Oakland property complaint (code enforcement)", "how": "OAK311 app or online form, with address, description and optional photos. Covers no heat, electrical, plumbing.", "phone": "(510) 238-3381", "email": "BBCode-inspect@oaklandca.gov", "source_url": "https://www.oaklandca.gov/Planning-Building/Code-Enforcement-Services/Report-a-Property-Complaint"},
+    {"name": "Courtesy Notice path", "how": "For small first-reported problems the city can send a Courtesy Notice without an inspection. The owner has 21 days to return a certification form with photos. An inspector-confirmed violation becomes a Notice of Violation.", "source_url": "https://www.oaklandca.gov/Planning-Building/Code-Enforcement-Services"},
+    {"name": "Rent Adjustment Program decreased-services petition", "how": "Tenants in covered units can petition for a rent reduction. Generally 90 days, but ongoing conditions (like a leaking roof) can be filed any time. Coverage varies; many units are excluded.", "phone": "(510) 238-3721", "email": "RAP@oaklandca.gov", "show_as": "eligibility_check_needed", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Rent-Adjustment-Program-RAP/For-Tenants/File-a-Tenant-Petition"},
+    {"name": "Tenant Protection Ordinance (OMC 8.22.640)", "how": "Lists failing to make repairs among possible bad-faith harassment. Ordinary disrepair is not automatically harassment.", "show_as": "legal_aid_question", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Tenant-Protection-Ordinance"}
+  ],
+
+  "legal_aid": [
+    {"name": "Centro Legal de la Raza", "phone": "510-437-1554", "email": "tenantsrights@centrolegal.org", "eligibility": "Free tenant legal services per the City of Oakland referral page. Confirm eligibility at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Tenant-Resources"},
+    {"name": "East Bay Community Law Center", "phone": "510-548-4040", "eligibility": "Counseling and paperwork help for low-income tenants; free workshops. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"},
+    {"name": "Bay Area Legal Aid", "phone": "800-551-5554", "eligibility": "Help for low-income people with unsafe housing, evictions, lockouts, utility shutoffs. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"}
+  ],
+
+  "unverified_do_not_encode": [
+    "Exact Tenant Protection Ordinance text, its 15-day notice rule and exemptions",
+    "Lead regulatory thresholds (Title 17)",
+    "Minimum indoor temperature in Oakland",
+    "Tenant-duty and entry rules (Civ 1941.2, 1929, 1954)",
+    "RAP restitution limits and lookback"
+  ],
+
+  "never_say": [
+    "You can withhold rent / stop paying rent",
+    "You have a case / you will win / you could get $X",
+    "The landlord must fix this within N days (unless a section above states it)",
+    "This is mold (as a finding)",
+    "Court-ready"
+  ]
+}
