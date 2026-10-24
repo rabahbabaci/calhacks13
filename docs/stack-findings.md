@@ -2,14 +2,14 @@
 
 Running log for the SpacetimeDB module and the health corpus ingest. Updated with every commit from this workstream.
 
-## Status (Sat Oct 24, 9:12 AM PT)
+## Status (Sat Oct 24, 9:47 AM PT)
 
 | Item | State |
 |---|---|
 | SpacetimeDB module `home` | Live on Rabah's laptop, schema matches docs/contracts.md section 4 |
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
-| urls.csv validation | Done: 15 of 16 valid, 8 hazards covered (no gas_leak) |
-| Corpus ingest (Apify) | Not started |
+| urls.csv validation | Done: 16 of 17 valid, 8 hazards covered (no gas_leak) |
+| Corpus ingest (Apify) | Done: 15 sources, 110 chunks, all 8 gate hazards |
 | Persistence after restart | Not tested |
 
 Gate by 11:30 AM: corpus loaded for every hazard except gas_leak, persistence confirmed, stdb.py working, all pushed.
@@ -62,10 +62,40 @@ Broke or surprised us:
 - Standard library only (urllib), no dependencies.
 - Smoke rows from testing use https://test.invalid/smoke and get wiped before the real ingest.
 
+### Step 4: Apify ingest (9:17 to 9:47)
+- Apify free plan. Token in the root .env (gitignored). apify-client 3.3.0 in data/.venv.
+- apify-client v3 returns Pydantic models, so it is `run.default_dataset_id`, not `run['defaultDatasetId']`. Dataset items are still dicts.
+- Actor apify/website-content-crawler with crawlerType cheerio (the default is a headless browser, slower and more expensive), maxCrawlDepth 0, saveMarkdown false. 16 pages in about 20 seconds.
+- Raw crawl output is committed as data/crawl_raw.jsonl. `ingest.py --from-cache` rebuilds the database with no Apify call, so a Wi-Fi outage or a missing token does not block anyone.
+- Cleaning: drops CDC review footers, date-only lines, "On this page" tables of contents, and language links. Chunks split by paragraph, packed to about 1,000 characters (a few reach about 1,090 when a short tail merges). Then chunks under 150 characters or with no keyword for the row's hazard are dropped, so multi-topic pages only contribute their on-topic parts. Example: the asthma triggers page kept 3 of 13 chunks for cockroaches.
+- When urls.csv says last_updated is unknown, ingest fills it from the page's "Last updated on" text if present.
+- Broke: the CDC electrical hazards page returns only its footer through the crawler (content probably sits in collapsed sections), so it is skipped.
+- Broke: the CDC carbon monoxide page first kept 1 of 5 chunks because it writes "CO" after the first line. Added `\bco\b` as a keyword.
+- cdph.ca.gov sends an incomplete TLS certificate chain. Python fails verification, so the validator retries that read-only fetch without verification and flags the row. Apify fetched it fine.
+- Perplexity: suggested 8 rows, kept 1 (CDPH Air Quality Section "Mold and Dampness", California-specific, covers the 2016 substandard housing rule and renter steps). Dropped: 2 EPA pest pages (only 1 or 2 cockroach mentions), CDPH EHIB mold page (video list only), CDPH lead page (one-paragraph landing page), 2 gas_leak pages about tornadoes and tsunamis (wrong scenario, and gas_leak is urgent-only per contracts.md section 5), and 1 row with no URL.
+- Wiped the smoke test rows with `spacetime publish --delete-data=always` before loading.
+
+Result in the database (sources / chunks):
+
+| Hazard | Sources | Chunks |
+|---|---|---|
+| carbon_monoxide | 2 | 9 |
+| cockroaches | 1 | 3 |
+| dampness_mold | 3 | 20 |
+| exposed_wiring | 1 | 2 |
+| inadequate_heat | 2 | 15 |
+| lead_paint | 2 | 27 |
+| rodents | 2 | 14 |
+| water_leak | 2 | 20 |
+| gas_leak | 0 | 0 (urgent-only, fixed message) |
+
+Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fix later with a dedicated cockroach page and an indoor electrical safety page (or a browser crawl of the CDC electrical page). Only one California source so far.
+
 ## Limits, cost, time
 
-- Time so far: about 25 minutes.
-- Cost so far: $0, everything is local.
+- Time so far: about 1 hour (8:50 to 9:47).
+- Apify: 2 crawl runs of 15 to 16 pages, $0.0048 and $0.0046, free plan. Reloads from cache cost nothing.
+- SpacetimeDB: $0, local.
 
 ### Step 3: validate urls.csv (9:13 to 9:17)
 - Moved urls.csv to data/urls.csv (repo root is outside this workstream's folders).

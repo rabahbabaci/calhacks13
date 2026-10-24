@@ -7,6 +7,7 @@ the hazard (at least MIN_HITS keyword matches).
 """
 import csv
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -34,7 +35,7 @@ KEYWORDS = {
     "exposed_wiring": [r"\belectric", r"\bwir(e|es|ing)\b"],
     "lead_paint": [r"\blead\b", r"\bpaint"],
     "inadequate_heat": [r"\bhypothermia\b", r"\bcold\b", r"\bheat(ing|er|ers)?\b"],
-    "carbon_monoxide": [r"carbon monoxide"],
+    "carbon_monoxide": [r"carbon monoxide", r"\bco\b"],
     "gas_leak": [r"gas leak", r"natural gas"],
 }
 
@@ -51,9 +52,21 @@ def page_text(html):
     return re.sub(r"<[^>]+>", " ", html).lower()
 
 
+TLS_NOTES = {}
+
+
 def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    try:
+        resp = urllib.request.urlopen(req, timeout=20)
+    except urllib.error.URLError as e:
+        if "CERTIFICATE_VERIFY_FAILED" not in str(e.reason):
+            raise
+        # Some servers (cdph.ca.gov) send an incomplete certificate chain. Browsers recover, Python does not.
+        # Read-only fetch of a public page, so retry unverified and flag it.
+        resp = urllib.request.urlopen(req, timeout=20, context=ssl._create_unverified_context())
+        TLS_NOTES[url] = "TLS chain incomplete, fetched without verification"
+    with resp:
         charset = resp.headers.get_content_charset() or "utf-8"
         return resp.status, resp.geturl(), resp.read(5_000_000).decode(charset, "replace")
 
@@ -104,6 +117,8 @@ def main():
         else:
             valid.append({k: row[k].strip() for k in FIELDS})
             warn = "  (last_updated unknown)" if row["last_updated"].strip().lower() == "unknown" else ""
+            if row["url"].strip() in TLS_NOTES:
+                warn += f"  ({TLS_NOTES[row['url'].strip()]})"
             print(f"OK   {label}  [{hits} hits]{warn}")
         time.sleep(0.5)
     with open(OUT, "w", newline="", encoding="utf-8") as f:
