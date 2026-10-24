@@ -39,9 +39,12 @@ Tags are internal. User-facing labels never say "mold" as a finding; use "visibl
     "older_adults": false,
     "pregnancy": false,
     "breathing_condition": false
-  }
+  },
+  "notes": "optional free text from the tenant"
 }
 ```
+
+`notes` is optional. Agents may read it for context but never treat it as a finding or connect it to a hazard.
 
 ## 4. SpacetimeDB module `home`
 
@@ -57,6 +60,11 @@ Reducers:
 - `add_source(url, title, publisher, hazard, last_updated)`
 - `add_chunk(source_url, hazard, ordinal, text)`
 - `save_assessment(case_id, hazard, payload_json)`
+
+Notes for readers:
+- Timestamps (`fetched_at`, `created_at`) come back from SQL over HTTP as a one-element array of microseconds since epoch, e.g. `[1792862222185738]`. Divide by 1,000,000 for Unix seconds.
+- Reducer errors return HTTP 530. `data/stdb.py` raises `StdbError`.
+- There is no delete reducer. Never run `spacetime publish --delete-data=always`: it wipes every table, including saved assessments.
 
 ## 5. Health agent output
 
@@ -77,4 +85,17 @@ One object per hazard.
 }
 ```
 
-Rules: every claim cites retrieved chunk IDs or gets dropped. `exposed_wiring`, `carbon_monoxide`, `gas_leak` set `urgent: true` with a fixed safety message before any LLM call.
+Rules: every claim cites retrieved chunk IDs or gets dropped. `exposed_wiring`, `carbon_monoxide`, `gas_leak` set `urgent: true` with a fixed safety message before any LLM call. Urgent hazards use the same shape with empty claim lists.
+
+The agent returns one wrapper per case:
+
+```json
+{
+  "assessments": [ /* section 5 objects */ ],
+  "not_assessed": [{"hazard": "rodents", "reason": "unconfirmed, confidence below 0.5"}],
+  "dropped": [ /* claims removed by the validator, for audit only */ ],
+  "usage": [ /* token counts per hazard */ ]
+}
+```
+
+For downstream agents and the packet: show `assessments` to the tenant. List `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal and never shown to the tenant.
