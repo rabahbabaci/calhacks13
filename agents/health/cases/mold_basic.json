@@ -1,0 +1,9 @@
+{
+  "case_id": "case_health_001",
+  "address": "123 Example St, Oakland, CA 94612",
+  "jurisdiction": {"state": "CA", "city": "Oakland"},
+  "hazards": [
+    {"hazard": "dampness_mold", "location": "bathroom ceiling", "confidence": 0.82, "confirmed_by_tenant": true, "evidence_ids": ["photo_3"]}
+  ],
+  "household": {"children": false, "older_adults": false, "pregnancy": false, "breathing_condition": false}
+}
