@@ -1,0 +1,335 @@
+{
+  "pack_id": "ca",
+  "status": "draft_needs_verification",
+  "jurisdiction": {
+    "state": "CA",
+    "city": ""
+  },
+  "verified_on": null,
+  "verified_how": "DRAFT, NOT VERIFIED. Excerpts were copied from leginfo.legislature.ca.gov on 2026-10-24 by Claude and have not been reviewed by a person. Before setting status to \"verified\": open every source_url, check each excerpt word for word and each summary against the full section, then fill verified_on. The legal agent ignores this pack until then (set LEGAL_DRAFT_PACKS=1 to try it locally).",
+  "disclaimer": "General legal information, not legal advice. Coverage, notice, causation and agency findings change what applies. Cities and counties can add rules on top of state law.",
+  "hazard_laws": [
+    {
+      "hazard": "dampness_mold",
+      "citations": [
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(a)(11)",
+          "excerpt": "Dampness of habitable rooms.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(a)(13)",
+          "excerpt": "Visible mold growth, as determined by a health officer or a code enforcement officer",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Civil Code 1941.7(a)",
+          "excerpt": "until the lessor has notice of the dilapidation or if the tenant is in violation of Section 1941.2.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.7"
+        }
+      ],
+      "landlord_duty": "Dampness that endangers occupants can make a unit substandard. Mold only counts as substandard once a health or code enforcement officer determines it. The landlord's mold repair duty starts when they have notice.",
+      "tenant_options": [
+        "Give the landlord written notice and keep proof of when and how",
+        "Document with dated photos",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "A photo or AI label is never an officer's determination",
+        "Minor mold on surfaces meant to get wet (like a shower) is excluded",
+        "Do not presume the tenant caused it"
+      ]
+    },
+    {
+      "hazard": "water_leak",
+      "citations": [
+        {
+          "cite": "Cal. Civil Code 1941.1(a)(1)",
+          "excerpt": "Effective waterproofing and weather protection of roof and exterior walls, including unbroken windows and doors.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(g)(2)",
+          "excerpt": "Deteriorated or ineffective waterproofing of exterior walls, roofs, foundations, or floors, including broken windows or doors.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(e)",
+          "excerpt": "All plumbing, except plumbing that conformed with all applicable laws in effect at the time of installation and has been maintained in good condition",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "A unit that substantially lacks effective waterproofing and weather protection is untenantable. Leaking roofs, walls or windows and badly maintained plumbing can make a building substandard.",
+      "tenant_options": [
+        "Give the landlord written notice and keep proof of when and how",
+        "Document with dated photos of the leak and any damage",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "Whether a leak is substantial enough is a judgment for an inspector or court",
+        "Do not presume the tenant caused it"
+      ]
+    },
+    {
+      "hazard": "rodents",
+      "citations": [
+        {
+          "cite": "Cal. Civil Code 1941.1(a)(6)",
+          "excerpt": "kept in every part clean, sanitary, and free from all accumulations of debris, filth, rubbish, garbage, rodents, and vermin.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(a)(12)",
+          "excerpt": "Infestation of insects, vermin, or rodents as determined by a health officer",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "Areas under the landlord's control must be kept free of rodents and vermin. An infestation makes a building substandard once a health officer (or, where there is no health officer agreement, a code enforcement officer) determines it.",
+      "tenant_options": [
+        "Give the landlord written notice and keep proof of when and how",
+        "Document with dated photos of droppings, nests or damage",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "Signs in a photo are not an officer's determination of infestation",
+        "Do not presume the tenant caused it"
+      ]
+    },
+    {
+      "hazard": "cockroaches",
+      "same_as": "rodents"
+    },
+    {
+      "hazard": "exposed_wiring",
+      "citations": [
+        {
+          "cite": "Cal. Civil Code 1941.1(a)(5)",
+          "excerpt": "Electrical lighting, with wiring and electrical equipment that conformed with applicable law at the time of installation, maintained in good working order.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(d)",
+          "excerpt": "All wiring, except that which conformed with all applicable laws in effect at the time of installation if it is currently in good and safe condition and working properly.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "Wiring and electrical equipment must be maintained in good working order. Wiring that is not in good and safe condition can make a building substandard.",
+      "tenant_options": [
+        "Keep away from exposed wiring and do not try to fix it yourself",
+        "Give the landlord written notice and keep proof of when and how",
+        "Document with dated photos from a safe distance",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "For sparks, burning smell or shocks, call 911 or the fire department first",
+        "Whether wiring is unsafe is for an inspector to decide"
+      ]
+    },
+    {
+      "hazard": "lead_paint",
+      "citations": [
+        {
+          "cite": "Cal. Health & Safety Code 17920.10(a)",
+          "excerpt": "is deemed to be in violation of this part as to any portion that contains lead hazards.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.10.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.10(a)",
+          "excerpt": "“lead hazards” means deteriorated lead-based paint, lead-contaminated dust, lead-contaminated soil, or disturbing lead-based paint without containment",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.10.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "A building is in violation of state housing law where it contains lead hazards, such as deteriorated lead-based paint or lead-contaminated dust, at or above the state regulatory levels.",
+      "tenant_options": [
+        "Give the landlord written notice and keep proof of when and how",
+        "Document with dated photos of peeling or chipping paint",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Ask your doctor about a blood lead test for children or anyone pregnant",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in this section.",
+      "cautions": [
+        "Peeling paint is not proof of lead; only testing against the Title 17 levels shows a lead hazard",
+        "Do not sand or scrape the paint"
+      ]
+    },
+    {
+      "hazard": "inadequate_heat",
+      "citations": [
+        {
+          "cite": "Cal. Civil Code 1941.1(a)(4)",
+          "excerpt": "Heating facilities that conformed with applicable law at the time of installation, maintained in good working order.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(a)(6)",
+          "excerpt": "Lack of adequate heating.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "Heating facilities must be maintained in good working order. Lack of adequate heating can make a building substandard.",
+      "tenant_options": [
+        "Give the landlord written notice and keep proof of when and how",
+        "Keep a dated log of indoor temperatures",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "State law here sets no minimum temperature; local codes may",
+        "Do not use an oven or outdoor heater for heat"
+      ]
+    },
+    {
+      "hazard": "carbon_monoxide",
+      "citations": [
+        {
+          "cite": "Cal. Health & Safety Code 17926(a)",
+          "excerpt": "shall install a carbon monoxide device, approved and listed by the State Fire Marshal pursuant to Section 13263, in each existing dwelling unit having a fossil fuel burning heater or appliance, fireplace, or an attached garage",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17926.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17926.1(a)",
+          "excerpt": "shall maintain carbon monoxide devices in that dwelling unit",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17926.1.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17926.1(c)",
+          "excerpt": "The carbon monoxide device shall be operable at the time that the tenant takes possession.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17926.1.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17926.1(c)",
+          "excerpt": "The owner or owner’s agent shall correct any reported deficiencies or inoperabilities in the carbon monoxide device",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17926.1.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "Units with a fossil fuel heater or appliance, fireplace or attached garage need a carbon monoxide device. A landlord must keep it working, have it operable at move-in, and fix it once told it is broken or missing.",
+      "tenant_options": [
+        "If a carbon monoxide alarm sounds or anyone feels dizzy or sick, get outside and call 911",
+        "Tell the landlord in writing that the device is missing or not working",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "The landlord is not in violation for a broken device until notified.",
+      "cautions": [
+        "The tenant has to tell the landlord about a broken or missing device"
+      ]
+    },
+    {
+      "hazard": "gas_leak",
+      "citations": [
+        {
+          "cite": "Cal. Civil Code 1941.1(a)(2)",
+          "excerpt": "Plumbing or gas facilities that conformed to applicable law in effect at the time of installation, maintained in good working order.",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(e)",
+          "excerpt": "All plumbing, except plumbing that conformed with all applicable laws in effect at the time of installation and has been maintained in good condition",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        },
+        {
+          "cite": "Cal. Health & Safety Code 17920.3(f)",
+          "excerpt": "All mechanical equipment, including vents, except equipment that conformed",
+          "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=17920.3.&lawCode=HSC"
+        }
+      ],
+      "landlord_duty": "Gas facilities must be maintained in good working order. Faulty plumbing or mechanical equipment, including vents, can make a building substandard.",
+      "tenant_options": [
+        "If you smell gas, leave right away and call the gas utility or 911 from outside",
+        "Give the landlord written notice and keep proof of when and how",
+        "Ask your city or county code enforcement (or environmental health) office for an inspection",
+        "Talk to free legal aid before using any rent remedy"
+      ],
+      "deadline_note": "No fixed repair deadline in these sections.",
+      "cautions": [
+        "Safety first: do not use switches or flames near a suspected leak",
+        "Whether equipment is faulty is for the utility or an inspector to decide"
+      ]
+    }
+  ],
+  "general_rules": [
+    {
+      "cite": "Cal. Civil Code 1941",
+      "summary": "General duty to repair conditions that make a unit untenantable.",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941"
+    },
+    {
+      "cite": "Cal. Civil Code 1941.1",
+      "summary": "Lists what a unit must have to be tenantable, and counts any unit that is substandard under Health and Safety Code 17920.3 or 17920.10 as untenantable.",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1941.1"
+    },
+    {
+      "cite": "Cal. Civil Code 1942",
+      "summary": "Repair-and-deduct or move out, only after notice and landlord neglect. Capped at one month's rent, no more than twice in 12 months. 30 days after notice is presumed reasonable, but it is not a universal deadline.",
+      "show_as": "legal_aid_question",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942"
+    },
+    {
+      "cite": "Cal. Civil Code 1942.3",
+      "summary": "In an eviction case, a presumption that the landlord breached habitability can arise if an officer gave written notice after inspection and the conditions stayed unfixed 60 days later without good cause.",
+      "show_as": "legal_aid_question",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.3"
+    },
+    {
+      "cite": "Cal. Civil Code 1942.4",
+      "summary": "Limits on collecting rent only when an official inspection found the problem, an officer gave written notice, and it stayed unfixed 35 days after that official notice. The 35 days run from the officer's notice, not the tenant's letter.",
+      "show_as": "legal_aid_question",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.4"
+    },
+    {
+      "cite": "Cal. Civil Code 1942.5",
+      "summary": "Protection against retaliation for up to 180 days after a repair request, complaint or inspection, with conditions. Not blanket protection from eviction.",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.5"
+    },
+    {
+      "cite": "Cal. Civil Code 1946.2",
+      "summary": "After 12 months of lawful occupancy, many tenancies can only be ended for a just cause stated in the notice. Many units are exempt.",
+      "show_as": "eligibility_check_needed",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1946.2"
+    }
+  ],
+  "city_procedures": [
+    {
+      "name": "Local code enforcement inspection",
+      "how": "Cities, and counties for unincorporated areas, inspect rental housing on complaint. A written notice from an inspector is what Civil Code 1942.3 and 1942.4 rely on. Search your city or county name plus \"code enforcement\" to find the office.",
+      "source_url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1942.4"
+    }
+  ],
+  "legal_aid": [
+    {
+      "name": "LawHelpCA",
+      "eligibility": "Statewide directory of free and low-cost legal aid by county, with tenant guides. Eligibility depends on the organization.",
+      "source_url": "https://www.lawhelpca.org/"
+    },
+    {
+      "name": "State Bar of California certified Lawyer Referral Services",
+      "eligibility": "Referrals to a local lawyer with a reduced-fee or free first consultation. Not free legal aid.",
+      "source_url": "https://www.calbar.ca.gov/public/find-legal-professionals/find-lawyer-referral-service"
+    }
+  ],
+  "unverified_do_not_encode": [
+    "Which local agency inspects (city vs county, building vs health department) and how to file",
+    "Local ordinances: rent control, just-cause, relocation, minimum indoor temperature",
+    "Lead regulatory thresholds (Title 17)",
+    "Tenant-duty and entry rules (Civ 1941.2, 1929, 1954)",
+    "Which units are exempt from Civ 1946.2 and the rent cap in Civ 1947.12",
+    "Stove and refrigerator duties added to Civ 1941.1 for leases from 2026 (not one of our hazard tags)"
+  ],
+  "never_say": [
+    "You can withhold rent / stop paying rent",
+    "You have a case / you will win / you could get $X",
+    "The landlord must fix this within N days (unless a section above states it)",
+    "This is mold (as a finding)",
+    "Court-ready"
+  ]
+}
