@@ -212,6 +212,7 @@ def main():
     ap.add_argument("--workers", type=int, default=WORKERS)
     ap.add_argument("--timeout", type=float, default=RUN_TIMEOUT_S)
     ap.add_argument("--agents", default=",".join(AGENTS), help="comma-separated subset of agents")
+    ap.add_argument("--wait", type=float, default=120, help="--once: seconds to wait for the first confirm before exiting")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
@@ -280,8 +281,8 @@ def main():
                     log.info("  %-7s %5.1fs  %s/%s/%s", status, secs, *key)
                 pool.shutdown(wait=False, cancel_futures=True)
                 sys.exit(0 if all(s == "done" for _, _, s in timings) else 1)
-            if t_start is None and idle_polls >= 3:
-                log.info("nothing to launch for %s, exiting", args.case_id or "any case")
+            if t_start is None and idle_polls * POLL_S >= args.wait:
+                log.info("nothing to launch for %s in %.0fs, exiting", args.case_id or "any case", args.wait)
                 pool.shutdown(wait=False)
                 sys.exit(0)
 
