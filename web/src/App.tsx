@@ -244,6 +244,46 @@ async function geocodeAddress(address: string) {
   }
 }
 
+/* Address suggestions from the ArcGIS World Geocoder, the same service the clinic map uses.
+   No key for suggestions. Biased to California so "2301 Waverly" finds Oakland before anywhere else. */
+function tidyAddress(text: string) {
+  // "2301 Waverly St, Oakland, CA, 94612, USA" -> "2301 Waverly St, Oakland, CA 94612", the form the API parses.
+  const parts = text.split(",").map((part) => part.trim()).filter((part) => part && part !== "USA");
+  if (parts.length >= 4 && /^[A-Z]{2}$/.test(parts[parts.length - 2]) && /^\d{5}$/.test(parts[parts.length - 1])) {
+    const zip = parts.pop() as string;
+    const state = parts.pop() as string;
+    return `${parts.join(", ")}, ${state} ${zip}`;
+  }
+  return parts.join(", ");
+}
+
+let suggestTimer = 0;
+let suggestSeq = 0;
+function suggestAddresses(text: string): Promise<string[]> {
+  const query = text.trim();
+  window.clearTimeout(suggestTimer);
+  if (query.length < 4) return Promise.resolve([]);
+  const seq = ++suggestSeq;
+  return new Promise((resolve) => {
+    suggestTimer = window.setTimeout(async () => {
+      const url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest?"
+        + new URLSearchParams({
+          f: "json", text: query, countryCode: "USA", category: "Address,Point Address,Street Address",
+          maxSuggestions: "6", location: "-119.4,36.8", searchExtent: "-124.5,32.5,-114.1,42.0",
+        });
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (seq !== suggestSeq) return resolve([]);
+        const rows = (data?.suggestions || []) as { text?: string }[];
+        resolve(rows.map((row) => tidyAddress(row.text || "")).filter(Boolean));
+      } catch {
+        resolve([]);
+      }
+    }, 250);
+  });
+}
+
 function project(lon: number, lat: number, zoom: number) {
   const n = 2 ** zoom;
   const x = ((lon + 180) / 360) * n;
@@ -689,6 +729,7 @@ export function App() {
   // After "This is in my home": a pop-up pointing at the next step. null = hidden.
   const [nudge, setNudge] = useState<{ tileId: string } | null>(null);
   const [address, setAddress] = useState("");
+  const [addressHints, setAddressHints] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<HazardDetail | null>(null);
@@ -1112,8 +1153,11 @@ export function App() {
             <h2>Your home</h2>
             <p className="onboard-lede">Tell us where you live and show us around. You check every finding before anything else happens.</p>
             <label className="field">Address
-              <input value={address} onChange={(e) => setAddress(e.target.value)} required autoComplete="street-address"
-                placeholder="Street, city, state and ZIP" />
+              <input value={address} onChange={(e) => { setAddress(e.target.value); suggestAddresses(e.target.value).then(setAddressHints); }}
+                required autoComplete="off" list="address-hints" placeholder="Street, city, state and ZIP" />
+              <datalist id="address-hints">
+                {addressHints.map((hint) => <option key={hint} value={hint} />)}
+              </datalist>
               <small>For example: 123 Example St, Oakland, CA 94612</small>
             </label>
             <MediaPicker file={file} onChange={setFile} />
