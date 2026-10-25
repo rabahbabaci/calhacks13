@@ -56,9 +56,9 @@ load_env()
 from stdb import BASE_URL, StdbError, call_reducer, sql  # noqa: E402
 
 POLL_S = 1.5
-RUN_TIMEOUT_S = 90
-STALE_S = 150  # a `running` row older than this belongs to a dead process
-WORKERS = 4
+RUN_TIMEOUT_S = 180  # legal measured at 135-140s on Sat 6:56 PM; tighten after the speed pass
+STALE_S = 240  # a `running` row older than this belongs to a dead process
+WORKERS = 6  # 3 hazards x 2 agents all in flight; urgent health runs never queue
 DEFAULT_JURISDICTION = {"state": "CA", "city": "Oakland"}
 
 log = logging.getLogger("orchestrator")
@@ -216,6 +216,7 @@ def main():
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # Anthropic SDK request lines
     agents = {a: AGENTS[a] for a in args.agents.split(",") if a}
     log.info("db=%s agents=%s workers=%d timeout=%ss case=%s", BASE_URL, list(agents), args.workers, args.timeout, args.case_id or "all")
 
