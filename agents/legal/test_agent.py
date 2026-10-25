@@ -73,30 +73,57 @@ class PackTest(unittest.TestCase):
 
 
 class DraftPackTest(unittest.TestCase):
-    """data/packs/ca.json is a draft: it must not be used as verified law until a person checks it."""
+    """A pack whose status isn't "verified" must not be used as verified law until a person checks it."""
+
+    DRAFT = {"pack_id": "tx", "status": "draft_needs_verification", "jurisdiction": {"state": "TX", "city": ""},
+             "hazard_laws": [{"hazard": "dampness_mold", "citations": [{"cite": "Tex. Prop. Code 92.052", "excerpt": "x", "source_url": "https://example.test"}]}]}
+    DALLAS = {"state": "TX", "city": "Dallas"}
+
+    def with_draft(self):
+        import tempfile
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        Path(tmp.name, "tx.json").write_text(json.dumps(self.DRAFT))
+        patcher = mock.patch.object(agent, "PACKS", Path(tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_draft_state_pack_is_skipped_by_default(self):
+        self.with_draft()
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
+            self.assertIsNone(agent.find_pack(self.DALLAS))
+
+    def test_draft_pack_can_be_turned_on_and_is_labelled(self):
+        self.with_draft()
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
+            pack = agent.find_pack(self.DALLAS)
+            self.assertEqual(pack["pack_id"], "tx")
+        sources, law = agent.pack_sources(pack, "dampness_mold")
+        self.assertFalse(any(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        self.assertTrue(all(s["jurisdiction"] == "TX" for s in sources.values()))
+
+
+class CaliforniaPackTest(unittest.TestCase):
+    """data/packs/ca.json: the verified California state pack, used outside cities that have their own pack."""
 
     CA = json.loads((agent.PACKS / "ca.json").read_text(encoding="utf-8"))
     FRESNO = {"state": "CA", "city": "Fresno"}
 
-    def test_draft_state_pack_is_skipped_by_default(self):
+    def test_state_pack_covers_other_california_cities(self):
         with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
-            self.assertIsNone(agent.find_pack(self.FRESNO))
+            self.assertEqual(agent.find_pack(self.FRESNO)["pack_id"], "ca")
             self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
-
-    def test_draft_pack_can_be_turned_on_and_is_labelled(self):
-        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
-            pack = agent.find_pack(self.FRESNO)
-            self.assertEqual(pack["pack_id"], "ca")
-            self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
-        sources, law = agent.pack_sources(pack, "dampness_mold")
-        self.assertFalse(any(s["verified"] for s in sources.values()))
-        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        sources, law = agent.pack_sources(agent.find_pack(self.FRESNO), "dampness_mold")
+        self.assertTrue(all(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("Verified"))
         self.assertTrue(all(s["jurisdiction"] == "CA" for s in sources.values()))
 
     def test_ca_pack_matches_the_oakland_format(self):
         oakland = agent.find_pack(OAKLAND)
-        self.assertEqual(self.CA["status"], "draft_needs_verification")
-        self.assertIsNone(self.CA["verified_on"])
+        self.assertEqual(self.CA["status"], "verified")
+        self.assertTrue(self.CA["verified_on"])
         self.assertEqual(self.CA["jurisdiction"], {"state": "CA", "city": ""})
         self.assertEqual(set(oakland) - set(self.CA), set())
         self.assertEqual({h["hazard"] for h in self.CA["hazard_laws"]}, {h["hazard"] for h in oakland["hazard_laws"]})

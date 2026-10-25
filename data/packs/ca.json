@@ -1,12 +1,12 @@
 {
   "pack_id": "ca",
-  "status": "draft_needs_verification",
+  "status": "verified",
   "jurisdiction": {
     "state": "CA",
     "city": ""
   },
-  "verified_on": null,
-  "verified_how": "DRAFT, NOT VERIFIED. Excerpts were copied from leginfo.legislature.ca.gov on 2026-10-24. The legal agent ignores this pack until it is verified (set LEGAL_DRAFT_PACKS=1 to try it locally).",
+  "verified_on": "2026-10-25",
+  "verified_how": "Excerpts copied from leginfo.legislature.ca.gov on 2026-10-24 and checked word for word against the live pages. Reviewed by Ansh on 2026-10-25. Open each source_url before quoting.",
   "disclaimer": "General legal information, not legal advice. Coverage, notice, causation and agency findings change what applies. Cities and counties can add rules on top of state law.",
   "hazard_laws": [
     {
