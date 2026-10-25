@@ -3,7 +3,7 @@
 Shared data shapes for the stack. Sections 1 to 3 are proposals for the whole team; Divit has the final say. Sections 4 and 5 cover Rab's health agent and the shared SpacetimeDB module.
 To add your agent's tables or output shape, send them to Rab and they get added here, so the module stays in one place.
 
-Last updated: Sat Oct 24, 9:10 AM PT
+Last updated: Sat Oct 24, 6:10 PM PT
 
 ## 1. Hazard tags (proposed)
 
@@ -47,6 +47,8 @@ Tags are internal. User-facing labels never say "mold" as a finding; use "visibl
 `notes` is optional. Agents may read it for context but never treat it as a finding or connect it to a hazard.
 
 ## 4. SpacetimeDB module `home`
+
+**Shared db:** `https://maincloud.spacetimedb.com`, database `home`. No `Authorization` header needed for SQL reads or reducer calls on these public tables. Setup, Python and curl examples: `docs/stack-findings.md`, "How to connect".
 
 All tables public. Writes go through reducers only. Reads use SQL over HTTP.
 
@@ -99,3 +101,17 @@ The agent returns one wrapper per case:
 ```
 
 For downstream agents and the packet: show `assessments` to the tenant. List `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal and never shown to the tenant.
+
+## 6. Shared case and agent output tables (PROPOSED, needs Divit's ok)
+
+Lets every agent write to the shared db without per-agent schemas, and lets the UI subscribe to one table for live updates.
+
+**case_input**: case_id (string, primary key), payload_json (string, the section 3 case input), created_at (timestamp)
+
+**agent_output**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action`), hazard (string, empty if not per-hazard), payload_json (string, that agent's output shape), created_at (timestamp)
+
+Reducers:
+- `save_case(case_id, payload_json)`
+- `save_output(case_id, agent, hazard, payload_json)`
+
+Each agent keeps its own output shape inside `payload_json`. The UI subscribes to `SELECT * FROM agent_output WHERE case_id = '<id>'`.
