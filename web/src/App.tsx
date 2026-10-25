@@ -730,6 +730,8 @@ export function App() {
   const [nudge, setNudge] = useState<{ tileId: string } | null>(null);
   const [address, setAddress] = useState("");
   const [addressHints, setAddressHints] = useState<string[]>([]);
+  const [hintIndex, setHintIndex] = useState(-1);
+  const [hintsOpen, setHintsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<HazardDetail | null>(null);
@@ -1153,11 +1155,49 @@ export function App() {
             <h2>Your home</h2>
             <p className="onboard-lede">Tell us where you live and show us around. You check every finding before anything else happens.</p>
             <label className="field">Address
-              <input value={address} onChange={(e) => { setAddress(e.target.value); suggestAddresses(e.target.value).then(setAddressHints); }}
-                required autoComplete="off" list="address-hints" placeholder="Street, city, state and ZIP" />
-              <datalist id="address-hints">
-                {addressHints.map((hint) => <option key={hint} value={hint} />)}
-              </datalist>
+              <div className="suggest">
+                <input
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    setHintIndex(-1);
+                    suggestAddresses(e.target.value).then((rows) => { setAddressHints(rows); setHintsOpen(rows.length > 0); });
+                  }}
+                  onFocus={() => setHintsOpen(addressHints.length > 0)}
+                  onBlur={() => window.setTimeout(() => setHintsOpen(false), 120)}
+                  onKeyDown={(e) => {
+                    if (!hintsOpen || !addressHints.length) return;
+                    if (e.key === "ArrowDown") { e.preventDefault(); setHintIndex((i) => (i + 1) % addressHints.length); }
+                    else if (e.key === "ArrowUp") { e.preventDefault(); setHintIndex((i) => (i - 1 + addressHints.length) % addressHints.length); }
+                    else if (e.key === "Enter" && hintIndex >= 0) { e.preventDefault(); setAddress(addressHints[hintIndex]); setHintsOpen(false); }
+                    else if (e.key === "Escape") setHintsOpen(false);
+                  }}
+                  required autoComplete="off" placeholder="Street, city, state and ZIP"
+                  role="combobox" aria-expanded={hintsOpen} aria-controls="address-hints" aria-autocomplete="list"
+                />
+                {hintsOpen && (
+                  <ul className="suggest-list" id="address-hints" role="listbox">
+                    {addressHints.map((hint, i) => {
+                      const comma = hint.indexOf(",");
+                      const street = comma > 0 ? hint.slice(0, comma) : hint;
+                      const rest = comma > 0 ? hint.slice(comma + 1).trim() : "";
+                      return (
+                        <li
+                          key={hint}
+                          role="option"
+                          aria-selected={i === hintIndex}
+                          className={i === hintIndex ? "is-active" : ""}
+                          onMouseDown={(e) => { e.preventDefault(); setAddress(hint); setHintsOpen(false); }}
+                          onMouseEnter={() => setHintIndex(i)}
+                        >
+                          <strong>{street}</strong>
+                          {rest && <span>{rest}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
               <small>For example: 123 Example St, Oakland, CA 94612</small>
             </label>
             <MediaPicker file={file} onChange={setFile} />
