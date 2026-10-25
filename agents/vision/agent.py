@@ -7,7 +7,7 @@ Usage (repo root):
   --dry-run  extract frames and print the estimated cost, no API call
   --live     allow a Claude call when there is no cached response (out/cache/); without it only cached
              responses are used, so a rerun never spends credits by accident
-  --save     not wired to the live hazard tables yet (contracts section 6); stops with "reducer missing"
+  --save     record the run and hazards in SpacetimeDB (contracts section 6), agent "hazard"
 
 Input: case stub {case_id, address, jurisdiction, household, notes?, source_url?}.
 Output: {"case_input": contract section 3 object, "vision_report": docs/contracts.md section 8 object}
@@ -33,7 +33,7 @@ sys.path.insert(0, str(HERE))
 
 import frames as fr  # noqa: E402
 import rules  # noqa: E402
-from stdb import StdbError, call_reducer  # noqa: E402
+from stdb import StdbError, call_reducer, sql  # noqa: E402
 from urgent import URGENT  # noqa: E402
 
 MODEL = "claude-sonnet-5-5"
@@ -42,6 +42,7 @@ PRICE_IN_PER_M = 3.0  # Sonnet list pricing, USD; check the Console usage page f
 PRICE_OUT_PER_M = 15.0
 EST_OUTPUT_TOKENS = 1000
 MAX_PARALLEL = 6
+AGENT = "hazard"
 OUT = HERE / "out"
 HOUSEHOLD = {"children": False, "older_adults": False, "pregnancy": False, "breathing_condition": False}
 
@@ -57,10 +58,6 @@ def load_env():
 
 
 class DataLayerDown(RuntimeError):
-    pass
-
-
-class ReducerMissing(RuntimeError):
     pass
 
 
@@ -445,7 +442,31 @@ def _segment_frames(seg, case_id, video_n, long_edge, max_frames):
 def analyze(case, segments, client=None, cache=None, live=False, save=False, budget=None,
             long_edge=fr.LONG_EDGE, max_frames=fr.MAX_FRAMES, cache_names=None):
     """segments: [{"type": "video", "path", "start", "end", "video_n"?} | {"type": "photos", "paths"}
-                  | {"type": ..., "frames": prepared frames}]. One Claude call per segment."""
+                  | {"type": ..., "frames": prepared frames}]. One Claude call per segment.
+    save=True records the run in SpacetimeDB (contracts section 6): create_case, start_run("hazard", ""),
+    add_hazard per new hazard, finish_run with the vision_report, or fail_run on error."""
+    kw = dict(client=client, cache=cache, live=live, budget=budget, long_edge=long_edge,
+              max_frames=max_frames, cache_names=cache_names)
+    if not save:
+        return _analyze(case, segments, **kw)
+    cid = case["case_id"]
+    _db("create_case", [cid, case.get("address", ""), json.dumps(case)])
+    _db("start_run", [cid, AGENT, ""])
+    try:
+        result = _analyze(case, segments, **kw)
+        save_detections(result["vision_report"])
+    except DataLayerDown:
+        raise
+    except Exception as e:
+        try:
+            _db("fail_run", [cid, AGENT, "", f"{type(e).__name__}: {e}"[:500]])
+        except Exception:
+            pass
+        raise
+    return result
+
+
+def _analyze(case, segments, client, cache, live, budget, long_edge, max_frames, cache_names):
     t_start = time.time()
     pack = rules.load_pack(case.get("jurisdiction"))
     if live and client is None:
@@ -497,24 +518,54 @@ def analyze(case, segments, client=None, cache=None, live=False, save=False, bud
         "usage": usage,
         "wall_seconds": round(time.time() - t_start, 2),
     }
-    result = {"case_input": to_case_input(case, final), "vision_report": report}
-    if save:
-        save_detections(report)
-    return result
+    return {"case_input": to_case_input(case, final), "vision_report": report}
+
+
+def _db(reducer, args):
+    try:
+        call_reducer(reducer, args)
+    except urllib.error.URLError as e:
+        raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
+    except StdbError as e:
+        raise RuntimeError(f"{reducer} rejected: {e}") from None
+
+
+def _existing_hazards(case_id):
+    cid = case_id.replace("'", "''")
+    try:
+        rows = sql(f"SELECT hazard, location, evidence_ids_json FROM hazard WHERE case_id = '{cid}'")
+    except urllib.error.URLError as e:
+        raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
+    except StdbError as e:
+        raise RuntimeError(f"hazard lookup failed: {e}") from None
+    out = []
+    for r in rows:
+        try:
+            ids = set(json.loads(r.get("evidence_ids_json") or "[]"))
+        except json.JSONDecodeError:
+            ids = set()
+        out.append((r["hazard"], r.get("location", ""), ids))
+    return out
 
 
 def save_detections(report):
-    """One save_detection call per hazard. Raises ReducerMissing until Rabah publishes the reducer."""
+    """add_hazard for each hazard not already on the case, then finish_run with the report.
+    A hazard counts as already saved when a row has the same tag and the same location or a shared
+    evidence frame, so rerunning a video doesn't duplicate rows. Returns the hazards added.
+    Rows start unconfirmed; the orchestrator runs health and legal once the tenant confirms."""
+    cid = report["case_id"]
+    existing = _existing_hazards(cid)
+    added = []
     for h in report["hazards"]:
-        try:
-            call_reducer("save_detection", [report["case_id"], h["hazard"], h["severity"], json.dumps(h)])
-        except urllib.error.URLError as e:
-            raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
-        except StdbError as e:
-            if e.status == 404 or "no such procedure" in e.body.lower() or "no such reducer" in e.body.lower():
-                raise ReducerMissing("save_detection is not published on this database yet. Ask Rabah to publish "
-                                     "spacetimedb/src/index.ts (no --delete-data), or run without --save.") from None
-            raise RuntimeError(f"save_detection rejected for {h['hazard']}: {e}") from None
+        ids = set(h["evidence_ids"])
+        if any(tag == h["hazard"] and (loc == h["location"] or ids & seen) for tag, loc, seen in existing):
+            continue
+        _db("add_hazard", [cid, h["hazard"], h["location"], float(h["confidence"]), json.dumps(h["evidence_ids"])])
+        existing.append((h["hazard"], h["location"], ids))
+        added.append(h["hazard"])
+    payload = {**report, "frames": [{"evidence_id": f["evidence_id"], "t_s": f["t_s"]} for f in report["frames"]]}
+    _db("finish_run", [cid, AGENT, "", json.dumps(payload)])
+    return added
 
 
 def _parse_segment(s):
@@ -554,7 +605,7 @@ def main(argv=None):
         return
     try:
         out = analyze(case, segments, cache=ResponseCache(OUT / "cache"), live=a.live, save=a.save)
-    except (NoCachedResponse, StaleFixture, ReducerMissing, DataLayerDown, fr.FfmpegMissing) as e:
+    except (NoCachedResponse, StaleFixture, DataLayerDown, fr.FfmpegMissing) as e:
         sys.exit(str(e))
     print(json.dumps(out, indent=2))
 

@@ -223,4 +223,11 @@ The vision agent (`agents/vision/`) returns two objects per case.
 - `unlabeled_observations` are things that fit none of the section 1 tags. They are not hazards and are never saved as detections.
 - Show the tenant `hazards` (using `label`, never the raw tag), `unlabeled_observations` and `not_visible_from_video`. `dropped` and `usage` are internal.
 
-**Saving:** the live section 6 tables replace the earlier `hazard_detection` / `save_detection` proposal, which is dropped. Planned wiring: `create_case` with the case input, `add_hazard` per hazard, and an `agent_run` row with agent `hazard` whose `payload_json` is the vision_report. Not wired yet: `--save` still calls `save_detection`, which doesn't exist, so it exits with "reducer missing" and writes nothing.
+**Saving** (`--save`, or `analyze(..., save=True)`): writes to the live section 6 tables, in this order.
+
+1. `create_case(case_id, address, case stub JSON)`
+2. `start_run(case_id, "hazard", "")`, one case-level run per analysis
+3. `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)` for each hazard not already on the case. A row with the same tag and the same location, or a shared evidence frame, counts as already saved, so reruns don't duplicate. Rows start with `confirmed_by_tenant = false`.
+4. `finish_run(case_id, "hazard", "", vision_report)`. Frames carry only `evidence_id` and `t_s`, with no local paths. On any error after `start_run`, it calls `fail_run` with the error instead.
+
+The `hazard` row has no severity, label or legal field, so the UI joins each row to `agent_run.payload_json.hazards` on (hazard, location) to get them. After the tenant confirms a row, the orchestrator runs health and legal on it.

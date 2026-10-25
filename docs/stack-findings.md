@@ -306,7 +306,7 @@ result = assess_case(case, save=True)   # case = contracts.md section 3 object, 
 
 Agent #1, computer vision hazard detection. Code in `agents/vision/`. Built Sat 6:30 to 7:00 PM PT.
 
-**Status:** 76/76 unit tests pass with no API calls. 6/6 behavioral evals pass, replaying for free from fixtures (first recording $0.187, re-recorded after the speed changes for $0.135). A 5-minute video runs end to end in 26 seconds for about $0.15. Saving to the live hazard tables is not wired yet (see Saving to SpacetimeDB).
+**Status:** 78/78 unit tests pass with no API calls. 6/6 behavioral evals pass, replaying for free from fixtures (first recording $0.187, re-recorded after the speed changes for $0.135). A 5-minute video runs end to end in 26 seconds for about $0.15. `--save` writes to the live hazard and agent_run tables (see Saving to SpacetimeDB).
 
 ### How to use it
 
@@ -404,8 +404,9 @@ The two candidates that keep coming up are `rust_corrosion` (3 times) and `struc
 
 ### Saving to SpacetimeDB
 
-- The proposed `hazard_detection` table and `save_detection` reducer are dropped, because the live core tables (section 6) already cover them. Nothing needs publishing.
-- Still to do: point `--save` at `create_case`, then `add_hazard` per hazard, then `start_run`/`finish_run` with agent `hazard` and the vision_report as `payload_json`. The orchestrator then picks up hazards once the tenant confirms them. Until that's done, `--save` stops with "reducer missing" and writes nothing.
+- `--save` writes to the live core tables (section 6), with no module changes: `create_case`, then `start_run("hazard", "")`, then `add_hazard` for each new hazard, then `finish_run` with the vision_report, or `fail_run` on error. Details in contracts.md section 8. The earlier `hazard_detection` / `save_detection` proposal is dropped.
+- Checked against Maincloud by replaying the cached 5-minute run (no Claude spend) as `case_vision_jakarta`. It wrote the case, 3 unconfirmed hazard rows (ids 8 to 10), and the `hazard` run as `done` with a 15 KB payload. A second run added no rows.
+- Those 3 rows are still on Maincloud. Confirming one in the UI makes the orchestrator run health and legal on it, which spends Claude credits.
 
 ### Next
 
