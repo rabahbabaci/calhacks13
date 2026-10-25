@@ -160,11 +160,11 @@ export const api = {
   confirm: (id: string) => call<HazardDetail>("/api/hazards/" + encodeURIComponent(id) + "/confirm", { method: "POST" }),
   clinics: (id: string, init?: RequestInit) => call<Clinics>("/api/hazards/" + encodeURIComponent(id) + "/clinics", init),
   preview: (id: string) => call<{ id: string; title: string; kind: string; preview: Preview }>("/api/tiles/" + encodeURIComponent(id) + "/preview", { method: "POST" }),
-  send: (id: string, to: string) =>
+  send: (id: string, to: string, gmailId = "") =>
     call<{ status: string; changed: string }>("/api/tiles/" + encodeURIComponent(id) + "/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to }),
+      body: JSON.stringify({ to, gmail_id: gmailId }),
     }),
   mail: (messages: { gmail_id: string; direction: string; counterparty: string; subject: string; at?: string; body?: string }[]) =>
     call<Home>("/api/tracking/mail", {

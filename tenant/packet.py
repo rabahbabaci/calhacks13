@@ -215,6 +215,7 @@ def _statute_rows(legal):
     }
     rows = []
     seen = set()
+    seen_text = set()
     for claim in (legal or {}).get("landlord_duty") or []:
         text = str(claim.get("text") or "").strip()
         for sid in claim.get("source_ids") or []:
@@ -224,7 +225,12 @@ def _statute_rows(legal):
             cite = str(source.get("cite") or "").strip()
             if not cite or cite in seen:
                 continue
+            # The same sentence cited twice (1941.1 and 1941.1(a)(1)) reads as padding: keep the first.
+            key = re.sub(r"\s+", " ", text.lower())
+            if key and key in seen_text:
+                continue
             seen.add(cite)
+            seen_text.add(key)
             rows.append({
                 "cite": cite,
                 "url": str(source.get("url") or "").strip(),
@@ -317,7 +323,13 @@ def classify_reply(message):
         return "unclear"
     if re.search(r"\b(evict|notice to quit|unlawful detainer|retaliat|raise (your |the )?rent|end (your |the )?lease)\b", blob):
         return "retaliation"
-    if re.search(r"\b(not (our|the landlord.?s) (responsibility|problem|duty|job)|tenant.?s? (responsibility|duty)|we (will not|won'?t|cannot|can'?t) (repair|fix|do)|denied|no (code )?violation|not habitab)\b", blob):
+    if re.search(
+        r"\b(not (our|my|the landlord.?s) (responsibility|problem|duty|job)|tenant.?s? (responsibility|duty)"
+        r"|(we|i|i'?m|we'?re) (will not|won'?t|cannot|can'?t|refuse to|am not going to|are not going to|not going to|do not intend to)"
+        r" (repair|fix|do|address|handle|deal|respond|take care|pay|cover|act)"
+        r"|refuse|denied|no (code )?violation|not habitab|nothing wrong|not (a|my|our) (concern|issue))\b",
+        blob,
+    ):
         return "refusal"
     if re.search(r"\b(we (fixed|repaired)|has been (fixed|repaired|completed)|completed the (work|repair)|work is (done|complete)|issue (has been )?resolved)\b", blob):
         return "completed"
@@ -431,12 +443,12 @@ REPLY = {
 def _followup_body(address, last, name="", today=None, legal=None, kind="unclear"):
     today = today or date.today().isoformat()
     premises = (address or "").strip() or "the leased premises"
-    prior = str((last or {}).get("subject") or "my earlier written notice").strip()
+    prior = _re_subject((last or {}).get("subject") or "my earlier written notice")
     statutes = _statute_block(legal, "This remains a written request under")
     ask = (REPLY.get(kind) or REPLY["unclear"])["ask"]
     return (
         f"{today}\n\n"
-        f"Re: {prior}\n\n"
+        f"{prior}\n\n"
         "To the landlord / property manager:\n\n"
         f"I write regarding my earlier written notice for {premises}. "
         "Please continue this matter in writing.\n\n"

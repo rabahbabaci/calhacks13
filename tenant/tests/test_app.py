@@ -1,6 +1,8 @@
 """No network. Layout, packet rules, the action validator, clinics, history, and the API."""
 import json
 import sys
+import time
+from datetime import datetime, timezone
 import threading
 from io import BytesIO
 from pathlib import Path
@@ -1436,3 +1438,79 @@ def test_reply_is_classified_on_the_landlord_words_only():
     assert classify_reply({"subject": "Re: notice", "body": "We will come by on Tuesday. " + quoted[6:]}) == "schedule"
     assert own_text("Yes.") == "Yes."
     assert classify_reply({"subject": "Re: notice", "body": "Yes."}) == "unclear"
+
+
+def test_refusals_in_the_first_person_route_to_legal_aid():
+    for text in ("I will not address this", "We refuse to fix it", "I'm not going to deal with that", "Not my problem"):
+        assert classify_reply({"subject": "Re: notice", "body": text}) == "refusal", text
+    assert classify_reply({"subject": "Re: notice", "body": "We will send someone Tuesday"}) == "schedule"
+
+
+def test_followup_heading_has_one_re_and_statutes_are_not_repeated():
+    from tenant.packet import _followup_body, _statute_rows
+
+    body = _followup_body("1 Main St, Oakland, CA 94612", {"subject": "Re: Written notice of needed repair"}, "Rab")
+    assert "Re: Written notice of needed repair" in body
+    assert "Re: Re:" not in body
+    legal = {
+        "sources": [
+            {"id": "a", "kind": "statute", "cite": "Cal. Civil Code 1941.1(a)(1)", "url": "https://x/1"},
+            {"id": "b", "kind": "statute", "cite": "Cal. Civil Code 1941.1", "url": "https://x/1"},
+            {"id": "c", "kind": "statute", "cite": "Cal. Civil Code 1941", "url": "https://x/2"},
+        ],
+        "landlord_duty": [
+            {"text": "A rental unit must have effective waterproofing.", "source_ids": ["a", "b"]},
+            {"text": "A landlord has a general duty to repair.", "source_ids": ["c"]},
+        ],
+    }
+    cites = [row["cite"] for row in _statute_rows(legal)]
+    assert cites == ["Cal. Civil Code 1941.1(a)(1)", "Cal. Civil Code 1941"]
+
+
+def test_landlord_name_drops_provenance_notes(monkeypatch):
+    monkeypatch.setenv("HOME_LIVE", "1")
+    item = new_case("live", "live@localhost", "Live", "1666 Da Vinci Ct, Davis, CA 95618")
+    apply_property(item, {"report": {"owner": {"name": "FPI Management (inferred from the website's asset paths)", "role": "management"}}})
+    from tenant.view import landlord_profile
+    assert landlord_profile(item)["company"] == "FPI Management"
+
+
+def test_sent_mail_keeps_the_gmail_id_so_the_sync_does_not_duplicate(api):
+    client, state = api
+    client.call("POST", "/api/dev/login", b"{}")
+    _onboard(client)
+    hid = "dampness_mold|bedroom wall beside the window"
+    client.call("POST", "/api/hazards/" + quote(hid, safe="") + "/confirm")
+    status, home = client.call("GET", "/api/home")
+    tile = next(t for t in home["tiles"] if t["id"].startswith("email-landlord|"))
+    status, _ = client.call("POST", "/api/tiles/" + quote(tile["id"], safe="") + "/send",
+                            json.dumps({"to": "owner@example.com", "gmail_id": "gm-123"}).encode())
+    assert status == 200
+    status, home = client.call("POST", "/api/tracking/mail", json.dumps({"messages": [
+        {"gmail_id": "gm-123", "direction": "out", "counterparty": "owner@example.com", "subject": "x", "at": "2099-01-01T00:00:00+00:00", "body": "dup"},
+    ]}).encode())
+    outs = [m for m in home["tracking"]["messages"] if m["direction"] == "out"]
+    assert len(outs) == 1 and outs[0]["gmail_id"] == "gm-123"
+
+
+def test_sending_the_followup_does_not_crash_once_the_tile_is_gone(api):
+    client, state = api
+    client.call("POST", "/api/dev/login", b"{}")
+    _onboard(client)
+    hid = "dampness_mold|bedroom wall beside the window"
+    client.call("POST", "/api/hazards/" + quote(hid, safe="") + "/confirm")
+    _status, home = client.call("GET", "/api/home")
+    notice = next(t for t in home["tiles"] if t["id"].startswith("email-landlord|"))
+    client.call("POST", "/api/tiles/" + quote(notice["id"], safe="") + "/send", json.dumps({"to": "owner@example.com"}).encode())
+    client.call("POST", "/api/tracking/mail", json.dumps({"messages": [
+        {"gmail_id": "in-1", "direction": "in", "counterparty": "owner@example.com", "subject": "Re: notice",
+         "at": datetime.now(timezone.utc).isoformat(), "body": "I will not address this"},
+    ]}).encode())
+    time.sleep(1.1)
+    _status, home = client.call("GET", "/api/home")
+    assert home["next"]["tile_id"] == "phone-legal-aid"
+    assert any(t["id"] == "email-followup" for t in home["tiles"])
+    status, out = client.call("POST", "/api/tiles/email-followup/send", json.dumps({"to": "owner@example.com", "gmail_id": "gm-2"}).encode())
+    assert status == 200
+    assert out["status"] == "done"
+    assert [m["direction"] for m in out["tracking"]["messages"]] == ["out", "in", "out"]
