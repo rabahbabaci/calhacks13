@@ -1,0 +1,170 @@
+{
+  "key": "34684dcbd64ac5af234a5026d7ec03c80d72d46e3ce72366619a5f5edb5022e6",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:01:38-0700",
+  "frames": [
+    {
+      "evidence_id": "video_1_t520s",
+      "t_s": 520.0,
+      "sha256": "7467be5aad05d0e881a53296d69151442e7a41688fce3c85260de16139574910",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t526s",
+      "t_s": 526.0,
+      "sha256": "56bfeae6cc716d979c4aaf771fbffa22740593495c59664ac3650a35ea3edaa4",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t531s",
+      "t_s": 531.0,
+      "sha256": "4ccb2e2606965bc3089a8a02538653bf08482a6bc71fce3f7a10f10d4bd3d288",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t535s",
+      "t_s": 535.0,
+      "sha256": "c8a33e547e048710494aa6fbe4b94b0e88189262f89cd50f66cc357ab78c2864",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t541s",
+      "t_s": 541.0,
+      "sha256": "e28f3d875f8b76960c4f3b7c43cb9b39c259a1c82237059fd707dea87c69a4fc",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t545s",
+      "t_s": 545.0,
+      "sha256": "452c2175b5d6c98dd9925f9c0096471560acd5f33cf8031724e8c891408b1501",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t550s",
+      "t_s": 550.0,
+      "sha256": "fc3c419b6715a6e8189369179bc843023117cda94a6f354a41b80efcc1930721",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t555s",
+      "t_s": 555.0,
+      "sha256": "b4347e01efb355d55522c1590a8201bf3f5dd3be7f354548b308e6314dd2951d",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t560s",
+      "t_s": 560.0,
+      "sha256": "c40d0a040a26dbc351221de4f569b369cc4e17953fd27614755df2ef8e547970",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t564s",
+      "t_s": 564.0,
+      "sha256": "457583193e654e66715641967c9cd6b6aeda106892419def77e16a33109cac0b",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t569s",
+      "t_s": 569.0,
+      "sha256": "2facb11bbc33218a5a4704961d28239b1cb0425c0fd3da1eb45b41f30ae309d1",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t574s",
+      "t_s": 574.0,
+      "sha256": "2b52ab9283e20f218d1cfb027b10fb3d7bfc54e07207fbbdde42f2a4d6e347b2",
+      "width": 768,
+      "height": 432
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01XaLjv13ZgqsPT179iYCN66",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [
+            {
+              "hazard": "lead_paint",
+              "location": "bedroom window sill/ledge below balcony door, peeling paint",
+              "room": "bedroom",
+              "evidence_ids": [
+                "video_1_t531s",
+                "video_1_t545s"
+              ],
+              "observed_signs": [
+                "Paint peeling and cracking along the window ledge face",
+                "Chipped, flaking patches with dark gaps in the paint"
+              ],
+              "severity": "moderate",
+              "severity_reason": "Peeling and cracking paint is visible on the ledge face.",
+              "extent": "patch",
+              "confidence": 0.6,
+              "needs_professional_check": true,
+              "check_reason": "Only testing can show whether deteriorated paint is a lead hazard.",
+              "bbox": [
+                0.05,
+                0.5,
+                0.95,
+                0.8
+              ]
+            }
+          ],
+          "unlabeled_observations": [
+            {
+              "description": "Balcony walls and floor tiles look dirty, with stains and streaks.",
+              "evidence_ids": [
+                "video_1_t550s",
+                "video_1_t560s",
+                "video_1_t564s"
+              ],
+              "suggested_tag": "dirty_surfaces"
+            },
+            {
+              "description": "Balcony concrete ledge and wall show wear and possible cracking.",
+              "evidence_ids": [
+                "video_1_t555s",
+                "video_1_t550s"
+              ],
+              "suggested_tag": "cracked_concrete"
+            }
+          ]
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2478,
+      "inference_geo": "global",
+      "input_tokens": 5870,
+      "output_tokens": 472,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

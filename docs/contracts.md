@@ -170,3 +170,57 @@ Rules, enforced in `agents/legal/validate.py`. Tests for the validator and the a
 The CLI also prints a wrapper per case: `{case_id, pack_id, assessments, not_assessed, legal_aid, failed, dropped, usage}`. Show `assessments` and the pack's `legal_aid` list to the tenant, and `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal.
 
 **Env vars** (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.
+
+## 8. Vision agent output (proposed)
+
+The vision agent (`agents/vision/`) returns two objects per case.
+
+**case_input**: a section 3 object whose `hazards` are exactly the section 2 shape. Pass it straight to the health agent's `assess_case()`. `confirmed_by_tenant` is always `false` from the vision agent; the tenant confirms in the UI.
+
+**vision_report**: the full detail, one object per case.
+
+```json
+{
+  "case_id": "case_001",
+  "notes": "optional case notes, carried through",
+  "source": {"type": "video", "url_or_path": "...", "segments": [{"start": 270, "end": 330, "frames": ["video_1_t282s"]}]},
+  "frames": [{"evidence_id": "video_1_t282s", "t_s": 282.0, "path": "agents/vision/out/frames/case_001/video_1_t282s.jpg"}],
+  "hazards": [{
+    "hazard": "dampness_mold",
+    "label": "Visible dampness or possible mold growth",
+    "location": "kitchen counter, behind the faucet",
+    "room": "kitchen",
+    "bbox": [0.3, 0.4, 0.7, 0.7],
+    "bbox_frame": "video_1_t285s",
+    "evidence_ids": ["video_1_t285s"],
+    "first_seen_s": 285.0,
+    "observed_signs": ["dark residue along the backsplash joint"],
+    "severity": "moderate",
+    "severity_reason": "...",
+    "extent": "patch",
+    "confidence": 0.7,
+    "needs_professional_check": true,
+    "check_reason": "...",
+    "confirmed_by_tenant": false,
+    "legal": {"pack_id": "ca-oakland", "resolved_from": null, "citations": [{"cite": "...", "excerpt": "...", "source_url": "https://..."}],
+              "landlord_duty": "...", "cautions": ["..."], "disclaimer": "..."},
+    "urgent_message": "only for exposed_wiring, gas_leak, carbon_monoxide (same text as the health agent)"
+  }],
+  "unlabeled_observations": [{"description": "rust on the balcony railing", "evidence_ids": ["video_1_t556s"], "suggested_tag": "rust_corrosion"}],
+  "rooms": [{"room": "kitchen", "evidence_ids": ["video_1_t285s"]}],
+  "not_visible_from_video": ["carbon_monoxide: CO is invisible; check for a working CO alarm"],
+  "dropped": [ /* hazards removed by the validator, internal only */ ],
+  "usage": [ /* tokens, cost, cached flag, extract_s and call_s per segment, internal only */ ],
+  "wall_seconds": 25.7
+}
+```
+
+- `rooms` and `not_visible_from_video` are derived in code from the merged hazards: every tag with no finding is listed, with a fixed reason for carbon_monoxide, gas_leak and inadequate_heat.
+
+- `severity` is one of `low`, `moderate`, `high`, `urgent`. `exposed_wiring`, `gas_leak`, `carbon_monoxide` are always `urgent`.
+- `evidence_ids` are `video_<n>_t<seconds>s` (seconds from the start of the source video) or `photo_<n>`.
+- `legal` comes from `data/packs/<state>_<city>.json` in code; `{"status": "no_pack_for_jurisdiction"}` when no pack exists. The model never writes it.
+- `unlabeled_observations` are things that fit none of the section 1 tags. They are not hazards and are never saved as detections.
+- Show the tenant `hazards` (using `label`, never the raw tag), `unlabeled_observations` and `not_visible_from_video`. `dropped` and `usage` are internal.
+
+**Saving:** the live section 6 tables replace the earlier `hazard_detection` / `save_detection` proposal, which is dropped. Planned wiring: `create_case` with the case input, `add_hazard` per hazard, and an `agent_run` row with agent `hazard` whose `payload_json` is the vision_report. Not wired yet: `--save` still calls `save_detection`, which doesn't exist, so it exits with "reducer missing" and writes nothing.
