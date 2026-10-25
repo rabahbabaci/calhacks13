@@ -7,6 +7,7 @@ HOME_CLINICS_LIVE=1, and then only the clinics lookup uses it.
     data/.venv/bin/python -m tenant.server
 """
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -29,6 +30,7 @@ from tenant.packet import thread_messages  # noqa: E402
 from tenant.view import clinics_payload, hazard_payload, home_payload, ingest_mail, new_case, tile_by_id, warm_clinics  # noqa: E402
 
 MEDIA = ROOT / "tenant" / "out" / "media"
+DIST = ROOT / "web" / "dist"
 COOKIE = "home={token}; Path=/; HttpOnly; SameSite=Lax"
 
 
@@ -115,6 +117,37 @@ def make_handler(state):
         def log_message(self, fmt, *args):
             return
 
+        def _cookie(self, token, expire=False):
+            """Session cookie. Marked Secure when the request arrived over https (Railway sets X-Forwarded-Proto)."""
+            value = COOKIE.format(token=token)
+            if expire:
+                value += "; Max-Age=0"
+            proto = (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+            if proto == "https" or os.environ.get("HOME_SECURE_COOKIE") == "1":
+                value += "; Secure"
+            return ("Set-Cookie", value)
+
+        def _static(self, path):
+            """Serve the built web app from web/dist. Unknown paths get index.html so client routes work."""
+            if not DIST.is_dir():
+                return False
+            rel = path.strip("/") or "index.html"
+            target = (DIST / rel).resolve()
+            if not str(target).startswith(str(DIST.resolve())) or not target.is_file():
+                target = DIST / "index.html"
+                if not target.is_file():
+                    return False
+            body = target.read_bytes()
+            content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+            cache = "public, max-age=31536000, immutable" if target.parent.name == "assets" else "no-cache"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", cache)
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+
         def _token(self):
             cookie = self.headers.get("Cookie") or ""
             match = re.search(r"(?:^|;\s*)home=([^;]+)", cookie)
@@ -147,6 +180,8 @@ def make_handler(state):
 
         def do_GET(self):
             path = unquote(urlparse(self.path).path)
+            if not path.startswith("/api/") and self._static(path):
+                return
             if path == "/api/me":
                 user = state.user_for(self._token())
                 google = bool(state.google_client_id)
@@ -225,7 +260,7 @@ def make_handler(state):
                     self._reply(404, {"error": "Demo sign-in is off."})
                     return
                 token, user = state.sign_in("demo", "demo@localhost", "Demo Tenant")
-                self._reply(200, {"ok": True, "name": user["name"]}, [("Set-Cookie", COOKIE.format(token=token))])
+                self._reply(200, {"ok": True, "name": user["name"]}, [self._cookie(token)])
                 return
             if path == "/api/auth/google":
                 if not state.google_client_id:
@@ -241,11 +276,11 @@ def make_handler(state):
                     self._reply(401, {"error": str(e)})
                     return
                 token, user = state.sign_in(info["sub"], info["email"], info["name"])
-                self._reply(200, {"ok": True, "name": user["name"]}, [("Set-Cookie", COOKIE.format(token=token))])
+                self._reply(200, {"ok": True, "name": user["name"]}, [self._cookie(token)])
                 return
             if path == "/api/auth/logout":
                 state.sessions.pop(self._token(), None)
-                self._reply(200, {"ok": True}, [("Set-Cookie", COOKIE.format(token="") + "; Max-Age=0")])
+                self._reply(200, {"ok": True}, [self._cookie("", expire=True)])
                 return
             user, case = self._user_case()
             if user is None:
@@ -387,17 +422,20 @@ def serve(host="127.0.0.1", port=8787, state=None):
 
 def main():
     load_env()
-    port = int(os.environ.get("HOME_PORT", "8787"))
+    # Railway (and most hosts) hand the listening port in PORT and need 0.0.0.0. Local default stays loopback.
+    port = int(os.environ.get("HOME_PORT") or os.environ.get("PORT") or "8787")
+    host = os.environ.get("HOME_HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
     state = AppState()
     if state.google_client_id:
         try:
             import google.oauth2.id_token  # noqa: F401
         except ImportError:
             sys.exit("GOOGLE_CLIENT_ID is set but google-auth is missing: data/.venv/bin/pip install -r tenant/requirements.txt")
-    httpd = serve(port=port, state=state)
+    httpd = serve(host=host, port=port, state=state)
     mode = "live mode: property on onboard, health and legal after confirm" if live_enabled() else "fixture mode, no Claude calls"
     sign_in = "Google sign-in on" if state.google_client_id else "Google sign-in off (no GOOGLE_CLIENT_ID)"
-    print(f"Home API on http://127.0.0.1:{port} ({mode}). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
+    site = "serving web/dist" if DIST.is_dir() else "API only (no web/dist build)"
+    print(f"Home API on http://{host}:{port} ({mode}, {site}). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
     httpd.serve_forever()
 
 
