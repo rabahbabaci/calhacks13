@@ -26,6 +26,17 @@ def parse_house_number(address):
     return m.group(1) if m else ""
 
 
+PLACE_TYPES = {"city", "town", "village", "borough", "cdp"}
+
+
+def strip_place_type(place):
+    """'Oakland city' -> 'Oakland'; Census place names end with their type."""
+    words = (place or "").split()
+    if len(words) > 1 and words[-1].lower() in PLACE_TYPES:
+        words = words[:-1]
+    return " ".join(words)
+
+
 def geocode(address):
     params = {
         "address": address,
@@ -52,7 +63,7 @@ def geocode(address):
         "house_number": parse_house_number(address),
         "street_name": " ".join(x for x in [parts.get("preDirection"), parts.get("preType"), parts.get("streetName")] if x),
         "street_suffix": parts.get("suffixType", ""),
-        "city": re.sub(r"\s+(city|town|village|borough|CDP)$", "", place, flags=re.I) or parts.get("city", "").title(),
+        "city": strip_place_type(place) or parts.get("city", "").title(),
         "place": place,
         # The postal city can differ from the incorporated place (Brooklyn vs New York).
         "postal_city": parts.get("city", "").title(),
