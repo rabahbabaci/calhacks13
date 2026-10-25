@@ -103,7 +103,7 @@ STDB_URL=https://maincloud.spacetimedb.com
 | `SOCRATA_APP_TOKEN_Property` | property | Optional, raises open-data rate limits |
 | `STDB_URL`, `STDB_DB`, `STDB_TOKEN` | everything that talks to the database | Default is local `http://127.0.0.1:3000`, database `home`. The team database is Maincloud, which needs no token. `_Legal` and `_Property` versions override these for one agent |
 | `LEGAL_RESEARCH=1` | legal | Turns on live web and court research. Off by default: answers come only from the pack, in about 10 s per hazard |
-| `LEGAL_DRAFT_PACKS=1` | legal | Lets the agent use packs still marked as needing verification (like `data/packs/ca.json`). For local testing only |
+| `LEGAL_DRAFT_PACKS=1` | legal | Lets the agent use packs still marked as needing verification. For local testing only |
 | `GOOGLE_CLIENT_ID`, `HOME_DEV_LOGIN`, `HOME_PORT` | tenant API | Sign-in settings and the port (default 8787) |
 
 ### 3. The database
@@ -223,7 +223,7 @@ Measured so far (details in `docs/stack-findings.md`):
 ## Legal coverage
 
 - **`data/packs/ca_oakland.json`:** verified for Oakland, CA.
-- **`data/packs/ca.json`:** a California statewide draft. Its statute excerpts match leginfo word for word, but no person has reviewed it yet. It is marked `draft_needs_verification`, so the agent skips it until someone verifies it.
+- **`data/packs/ca.json`:** verified for the rest of California (reviewed 2026-10-25). Its statute excerpts match leginfo word for word.
 - **Other places:** with no pack for the area, the legal agent reports the hazard as "not verified for your area" instead of guessing.
 
 Everything the app shows is general information, not legal or medical advice.
