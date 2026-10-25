@@ -124,9 +124,15 @@ class BudgetTest(unittest.TestCase):
 
     def test_submit_only_once(self):
         run = agent.HazardRun(FakeResearch(), {})
-        run.handle("submit_assessment", {"landlord_duty": []})
+        run.handle("submit_assessment", {"landlord_duty": [], "similar_cases": [{"text": "x", "source_ids": ["R1"]}]})
         with self.assertRaisesRegex(RuntimeError, "already submitted"):
             run.handle("submit_assessment", {"landlord_duty": []})
+
+    def test_no_similar_cases_is_sent_back_once(self):
+        run = agent.HazardRun(FakeResearch(), {})
+        with self.assertRaisesRegex(RuntimeError, "similar_cases is empty"):
+            run.handle("submit_assessment", {"landlord_duty": [], "similar_cases": []})
+        self.assertEqual(run.handle("submit_assessment", {"landlord_duty": [], "similar_cases": []}), "Submitted. You are done.")
 
     def test_unknown_tool(self):
         run = agent.HazardRun(FakeResearch(), {})
@@ -209,6 +215,79 @@ class AssessCaseTest(unittest.TestCase):
         out, calls = self.run_case(save=False)
         self.assertEqual(calls, [])
         self.assertEqual(len(out["assessments"]), 2)
+
+
+class NationwideTest(unittest.TestCase):
+    TEXAS = {"case_id": "tx_1", "address": "100 Congress Ave, Austin, TX 78701",
+             "hazards": [{"hazard": "water_leak", "location": "kitchen", "confidence": 0.9, "confirmed_by_tenant": True}]}
+
+    def test_jurisdiction_comes_from_the_geocoder_when_missing(self):
+        geo = {"state": "TX", "city": "Austin", "county": "Travis County"}
+        with mock.patch.object(agent, "geocode", return_value=geo) as g:
+            j = agent.resolve_jurisdiction(self.TEXAS)
+        g.assert_called_once()
+        self.assertEqual(j, {"state": "TX", "city": "Austin", "county": "Travis County"})
+
+    def test_given_jurisdiction_is_kept_without_geocoding(self):
+        with mock.patch.object(agent, "geocode") as g:
+            self.assertEqual(agent.resolve_jurisdiction(CASE), OAKLAND)
+        g.assert_not_called()
+
+    def test_state_pack_is_the_fallback(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "tx.json").write_text(json.dumps({"pack_id": "tx", "jurisdiction": {"state": "TX", "city": ""}}))
+            Path(tmp, "tx_austin.json").write_text(json.dumps({"pack_id": "tx-austin", "jurisdiction": {"state": "TX", "city": "Austin"}}))
+            with mock.patch.object(agent, "PACKS", Path(tmp)):
+                self.assertEqual(agent.find_pack({"state": "TX", "city": "Austin"})["pack_id"], "tx-austin")
+                self.assertEqual(agent.find_pack({"state": "TX", "city": "Dallas"})["pack_id"], "tx")
+                self.assertIsNone(agent.find_pack({"state": "OK", "city": "Tulsa"}))
+
+    def test_prior_sources_from_this_state(self):
+        rows = [
+            {"url": "https://statutes.capitol.texas.gov/92.052", "cite": "Tex. Prop. Code 92.052", "kind": "statute", "jurisdiction": "Dallas, TX", "excerpt": "A landlord shall make a diligent effort to repair", "fetched_at": [2]},
+            {"url": "https://austintexas.gov/code", "cite": "Austin code 25-12", "kind": "ordinance", "jurisdiction": "Austin, TX", "excerpt": "Austin property maintenance", "fetched_at": [1]},
+            {"url": "https://houston.gov/code", "cite": "Houston code", "kind": "ordinance", "jurisdiction": "Houston, TX", "excerpt": "other city", "fetched_at": [3]},
+            {"url": "https://leginfo.ca.gov/1941", "cite": "Cal. Civ. Code 1941", "kind": "statute", "jurisdiction": "Oakland, CA", "excerpt": "other state", "fetched_at": [4]},
+            {"url": "https://taken.example", "cite": "Already a pack source", "kind": "statute", "jurisdiction": "Austin, TX", "excerpt": "x", "fetched_at": [5]},
+        ]
+        with mock.patch.object(agent, "sql", return_value=rows):
+            prior = agent.prior_sources({"state": "TX", "city": "Austin"}, {"P1": {"url": "https://taken.example"}})
+        self.assertEqual(sorted(s["cite"] for s in prior.values()), ["Austin code 25-12", "Tex. Prop. Code 92.052"])
+        self.assertTrue(all(k.startswith("L") and s["prior"] and not s["verified"] for k, s in prior.items()))
+
+    def test_prior_sources_skip_quietly_when_the_db_is_down(self):
+        import urllib.error
+
+        with mock.patch.object(agent, "sql", side_effect=urllib.error.URLError("down")):
+            self.assertEqual(agent.prior_sources({"state": "TX", "city": "Austin"}, {}), {})
+        self.assertEqual(agent.prior_sources({}, {}), {})
+
+    def test_prompt_without_a_pack_points_at_state_law_and_courts(self):
+        case = {**self.TEXAS, "jurisdiction": {"state": "TX", "city": "Austin"}}
+        prior = {"L1": {"cite": "Tex. Prop. Code 92.052", "jurisdiction": "Dallas, TX", "text": "diligent effort to repair", "prior": True}}
+        text = agent.describe(case, case["hazards"][0], None, prior, None)
+        self.assertIn("No verified pack covers Austin, TX", text)
+        self.assertIn("supreme court: tex", text)
+        self.assertIn("L1: Tex. Prop. Code 92.052", text)
+
+    def test_prior_sources_are_citable_but_not_saved_again(self):
+        calls = []
+        prior = {"L1": {"cite": "Tex. Prop. Code 92.052", "url": "https://statutes.capitol.texas.gov/92.052", "kind": "statute", "verified": False, "text": "diligent effort to repair", "prior": True, "jurisdiction": "Dallas, TX"}}
+
+        def llm(*_a):
+            return {"landlord_duty": [{"text": "Texas landlords must make a diligent effort to repair.", "source_ids": ["L1"]}]}, {"calls": 1}
+
+        case = {**self.TEXAS, "jurisdiction": {"state": "TX", "city": "Austin"}}
+        with mock.patch.object(agent, "call_reducer", side_effect=lambda n, a: calls.append((n, a))), \
+             mock.patch.object(agent, "sql", return_value=[]), \
+             mock.patch.object(agent, "prior_sources", return_value=prior), \
+             mock.patch.object(agent, "run_llm", side_effect=llm):
+            out = agent.assess_case(case, save=True, client=object(), research=FakeResearch())
+        self.assertEqual(out["assessments"][0]["landlord_duty"][0]["source_ids"], ["L1"])
+        self.assertEqual(out["pack_id"], None)
+        self.assertNotIn("add_legal_source", [n for n, _ in calls])
 
 
 class LoadCaseTest(unittest.TestCase):

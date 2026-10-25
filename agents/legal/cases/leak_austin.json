@@ -1,0 +1,9 @@
+{
+  "case_id": "legal_case_austin_001",
+  "address": "1000 E 41st St, Austin, TX 78751",
+  "hazards": [
+    {"hazard": "water_leak", "location": "kitchen ceiling", "confidence": 0.82, "confirmed_by_tenant": true, "evidence_ids": ["photo_1"]}
+  ],
+  "household": {"children": false, "older_adults": true, "pregnancy": false, "breathing_condition": false},
+  "notes": "The ceiling has leaked for six weeks. I asked the manager in writing on the 2nd."
+}
