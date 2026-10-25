@@ -294,3 +294,7 @@ main { padding: 16px; max-width: 880px; width: 100%; margin: 0 auto; }
 .case-steps strong { display: block; font-size: 15px; }
 .case-steps small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: #5c564c; }
 .case-landlord { margin-top: 10px; }
+@media (min-width: 760px) {
+  .case { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .case-next { grid-column: 1 / -1; }
+}
