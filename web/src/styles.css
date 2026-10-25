@@ -374,6 +374,8 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 .onboard h2 { font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 28px; }
 .onboard-lede { margin: 0 0 8px; color: var(--muted); }
 .onboard .primary { margin-top: 8px; }
+.upload-bar { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+.upload-bar b { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width 300ms ease; }
 .optional { font-weight: 400; color: var(--muted); }
 .dropzone {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
