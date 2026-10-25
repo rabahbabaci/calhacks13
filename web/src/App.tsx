@@ -265,10 +265,10 @@ function zoomFor(points: MapPoint[], width: number, height: number) {
   return 10;
 }
 
+// OpenStreetMap's tile policy needs a Referer: without one the server still answers 200 but sends an
+// "Access blocked" picture, so the browser's default referrer must be left on. The a./b. hosts are retired.
 const TILE_LAYERS = [
   (z: number, x: number, y: number) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
-  (z: number, x: number, y: number) => `https://a.tile.openstreetmap.org/${z}/${x}/${y}.png`,
-  (z: number, x: number, y: number) => `https://b.tile.openstreetmap.org/${z}/${x}/${y}.png`,
 ];
 
 function ClinicMap({ clinics }: { clinics: ClinicRow[] }) {
@@ -353,7 +353,6 @@ function ClinicMap({ clinics }: { clinics: ClinicRow[] }) {
           className="clinic-tile"
           src={tile.src}
           alt=""
-          referrerPolicy="no-referrer"
           style={{ left: tile.left, top: tile.top }}
           onError={() => setLayer((cur) => (cur + 1 < TILE_LAYERS.length ? cur + 1 : cur))}
         />
@@ -376,7 +375,9 @@ function ClinicMap({ clinics }: { clinics: ClinicRow[] }) {
         );
       })}
       {points.length > 0 && (
-        <small className="clinic-map-note">© OpenStreetMap · {points.length} site{points.length === 1 ? "" : "s"}</small>
+        <small className="clinic-map-note">
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · {points.length} site{points.length === 1 ? "" : "s"}
+        </small>
       )}
     </div>
   );
