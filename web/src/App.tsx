@@ -1010,10 +1010,12 @@ export function App() {
     try {
       const draft = preview.preview;
       let viaGmail = true;
+      let gmailId = "";
       try {
         if (!GOOGLE_CLIENT_ID) throw new Error("Google is not configured.");
         const token = await requestGoogleMailToken();
-        await sendThroughGmail(token, dest, draft.subject, draft.body);
+        const sent = await sendThroughGmail(token, dest, draft.subject, draft.body) as { id?: string };
+        gmailId = sent?.id || "";
       } catch (gmailErr) {
         // No Gmail grant (demo tenant, "Sign in without Gmail", or a refused consent): hand the same
         // draft to the tenant's mail app instead of stopping here. The record is kept either way.
@@ -1021,7 +1023,7 @@ export function App() {
         window.location.assign(mailtoHref(dest, draft.subject, draft.body));
         setNotice(`Gmail is not connected (${String((gmailErr as Error).message || gmailErr)}), so the notice opened in your mail app. Press Send there.`);
       }
-      await api.send(preview.id, dest);
+      await api.send(preview.id, dest, gmailId);
       if (viaGmail) setNotice("");
       setPreview(null);
       const next = await refresh();

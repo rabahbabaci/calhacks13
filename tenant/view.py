@@ -256,10 +256,16 @@ def _initials(name):
     return letters or (name or "LL")[:2].upper()
 
 
+def clean_name(name):
+    """Drop the property agent's provenance notes from a display name: "FPI Management (inferred from ...)"."""
+    text = re.sub(r"\s*\([^)]*\)", "", str(name or ""))
+    return re.sub(r"\s+", " ", text).strip(" ,;-")
+
+
 def _contact(person):
     person = person or {}
     return {
-        "name": str(person.get("name") or "").strip(),
+        "name": clean_name(person.get("name")),
         "role": str(person.get("role") or "").strip(),
         "mailing_address": str(person.get("mailing_address") or "").strip(),
         "email": str(person.get("email") or "").strip(),
@@ -292,7 +298,7 @@ def landlord_profile(case):
     owner = _contact(prop.get("owner"))
     manager = _contact(prop.get("manager"))
     primary = _primary_landlord(owner, manager)
-    company = primary.get("name") or owner["name"] or manager["name"] or named_from_summary(prop.get("summary")) or "Landlord"
+    company = clean_name(primary.get("name") or owner["name"] or manager["name"] or named_from_summary(prop.get("summary"))) or "Landlord"
     if company != "Landlord" and not owner["name"] and not manager["name"]:
         owner = {**owner, "name": company, "role": owner["role"] or "company"}
         primary = owner

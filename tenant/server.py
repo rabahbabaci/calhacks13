@@ -344,6 +344,10 @@ def make_handler(state):
                     self._reply(400, {"error": "Enter the landlord email first."})
                     return
                 record = state.mailer.send({"to": to, "subject": tile["preview"]["subject"], "body": tile["preview"]["body"]})
+                # The browser sent it through Gmail and knows the message id. Keep it, so the inbox sync
+                # recognizes this mail as already recorded instead of adding it a second time.
+                gmail_id = str(incoming.get("gmail_id") or "").strip() or record["gmail_id"]
+                record["gmail_id"] = gmail_id
                 case["messages"].append({
                     "id": record["gmail_id"],
                     "direction": "out",
@@ -356,7 +360,8 @@ def make_handler(state):
                     "tile_id": tile["id"],
                     "body": tile["preview"].get("body") or "",
                 })
-                updated = tile_by_id(case, tile["id"])
+                # A follow-up tile disappears once it is sent (the thread now ends with our mail), so it may be gone.
+                updated = tile_by_id(case, tile["id"]) or {"status": "done", "changed": "Sent. Waiting for the next reply on Tracking."}
                 self._reply(200, {"status": updated["status"], "changed": updated["changed"],
                                   "tracking": {"messages": thread_messages(case["messages"]), "evidence": case["evidence"]}})
                 return
