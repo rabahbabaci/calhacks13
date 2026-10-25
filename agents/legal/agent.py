@@ -441,7 +441,8 @@ def describe(case, hazard_obj, pack, sources, law, deep=False):
         if is_draft(pack):
             lines.append(f"DRAFT jurisdiction pack {pack['pack_id']} (not yet verified; local testing only):")
         else:
-            lines.append(f"Verified jurisdiction pack {pack['pack_id']} (verified {pack.get('verified_on')}):")
+            when = f" (verified {pack['verified_on']})" if pack.get("verified_on") else ""
+            lines.append(f"Verified jurisdiction pack {pack['pack_id']}{when}:")
         if not pack_city and case_city:
             lines.append(
                 f"This is the statewide pack searched for {case_city}. Statewide entries apply in this city, "

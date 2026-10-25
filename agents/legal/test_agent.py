@@ -73,7 +73,48 @@ class PackTest(unittest.TestCase):
 
 
 class DraftPackTest(unittest.TestCase):
-    """data/packs/ca.json is a draft: city packs stay skipped; the state pack is used for an identified city."""
+    """A draft pack must not be shown as verified law. On main a draft statewide pack is still
+    used for an identified city (state law applies there) with its sources marked unverified."""
+
+    DRAFT = {"pack_id": "tx", "status": "draft_needs_verification", "jurisdiction": {"state": "TX", "city": ""},
+             "hazard_laws": [{"hazard": "dampness_mold", "citations": [{"cite": "Tex. Prop. Code 92.052", "excerpt": "x", "source_url": "https://example.test"}]}]}
+    DALLAS = {"state": "TX", "city": "Dallas"}
+
+    def with_draft(self):
+        import tempfile
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        Path(tmp.name, "tx.json").write_text(json.dumps(self.DRAFT))
+        patcher = mock.patch.object(agent, "PACKS", Path(tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_draft_state_pack_is_used_for_a_city_but_labelled(self):
+        self.with_draft()
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
+            pack = agent.find_pack(self.DALLAS)
+            self.assertEqual(pack["pack_id"], "tx")
+            self.assertIsNone(agent.find_pack({"state": "TX", "city": ""}))
+        sources, law = agent.pack_sources(pack, "dampness_mold", self.DALLAS)
+        self.assertFalse(any(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        self.assertTrue(all(s["jurisdiction"] == "Dallas, TX" for s in sources.values()))
+        self.assertEqual(law["hazard"], "dampness_mold")
+
+    def test_draft_pack_can_be_turned_on_and_is_labelled(self):
+        self.with_draft()
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
+            pack = agent.find_pack(self.DALLAS)
+            self.assertEqual(pack["pack_id"], "tx")
+        sources, law = agent.pack_sources(pack, "dampness_mold")
+        self.assertFalse(any(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        self.assertTrue(all(s["jurisdiction"] == "TX" for s in sources.values()))
+
+
+class CaliforniaPackTest(unittest.TestCase):
+    """data/packs/ca.json: the verified California state pack, searched for identified cities without their own pack."""
 
     CA = json.loads((agent.PACKS / "ca.json").read_text(encoding="utf-8"))
     FRESNO = {"state": "CA", "city": "Fresno"}
@@ -84,16 +125,15 @@ class DraftPackTest(unittest.TestCase):
             self.assertEqual(agent.find_pack(self.FRESNO)["pack_id"], "ca")
             self.assertEqual(agent.find_pack(self.DAVIS)["pack_id"], "ca")
             self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
-            self.assertIsNone(agent.find_pack({"state": "CA", "city": ""}))
+            # Verified statewide pack: a CA address with no identified city still gets state law.
+            self.assertEqual(agent.find_pack({"state": "CA", "city": ""})["pack_id"], "ca")
 
-    def test_draft_pack_sources_are_labelled_and_scoped_to_the_city(self):
-        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
+    def test_state_pack_sources_are_verified_and_scoped_to_the_city(self):
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
             pack = agent.find_pack(self.FRESNO)
-            self.assertEqual(pack["pack_id"], "ca")
-            self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
         sources, law = agent.pack_sources(pack, "dampness_mold", self.DAVIS)
-        self.assertFalse(any(s["verified"] for s in sources.values()))
-        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        self.assertTrue(all(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("Verified"))
         self.assertTrue(all(s["jurisdiction"] == "Davis, CA" for s in sources.values()))
         self.assertEqual(law["hazard"], "dampness_mold")
 
@@ -121,8 +161,7 @@ class DraftPackTest(unittest.TestCase):
 
     def test_ca_pack_matches_the_oakland_format(self):
         oakland = agent.find_pack(OAKLAND)
-        self.assertEqual(self.CA["status"], "draft_needs_verification")
-        self.assertIsNone(self.CA["verified_on"])
+        self.assertEqual(self.CA["status"], "verified")
         self.assertEqual(self.CA["jurisdiction"], {"state": "CA", "city": ""})
         self.assertEqual(set(oakland) - set(self.CA), set())
         self.assertEqual({h["hazard"] for h in self.CA["hazard_laws"]}, {h["hazard"] for h in oakland["hazard_laws"]})
