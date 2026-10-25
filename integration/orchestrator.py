@@ -97,7 +97,11 @@ def run_property(case):
     return _load("property", ROOT / "agents" / "property" / "agent.py").assess(case, save=True)
 
 
-# Per confirmed hazard. Property is not here: it reads the address, not one hazard.
+def run_plan(case):
+    return _load("plan", ROOT / "agents" / "plan" / "agent.py").assess(case, save=True)
+
+
+# Per confirmed hazard. Property and plan read the address, not one hazard.
 AGENTS = {
     "health": run_health,
     "legal": run_legal,
@@ -105,6 +109,7 @@ AGENTS = {
 
 CASE_AGENTS = {
     "property": run_property,
+    "plan": run_plan,
 }
 
 

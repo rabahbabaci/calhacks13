@@ -55,6 +55,11 @@ class ValidateTest(unittest.TestCase):
         out, _ = run("tenant_options", "Ask legal aid about repair-and-deduct.", ["G2"])
         self.assertEqual((out["tenant_options"], len(out["ask_legal_aid"])), ([], 1))
 
+    def test_string_claim_is_dropped(self):
+        out, _cited, dropped = validate("dampness_mold", {"tenant_options": ["Give written notice"]}, SOURCES)
+        self.assertEqual(out["tenant_options"], [])
+        self.assertEqual(dropped[0]["reason"], "claim is not an object")
+
     def test_similar_cases_need_case_law_and_allow_amounts(self):
         out, dropped = run("similar_cases", "A tenant was awarded $5,000 in a mold case.", ["R1"])
         self.assertEqual((len(out["similar_cases"]), dropped), (1, []))

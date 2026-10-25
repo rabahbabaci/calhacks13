@@ -307,6 +307,23 @@
   ],
   "legal_aid": [
     {
+      "name": "City of Davis Fair Housing Services",
+      "phone": "530-757-5623",
+      "cities": ["Davis"],
+      "zips": ["95616", "95618"],
+      "eligibility": "Fair housing help for Davis residents, listed on the California DRE tenant resources page. Confirm eligibility at intake.",
+      "source_url": "https://landlordtenant.dre.ca.gov/resources/tenant.html"
+    },
+    {
+      "name": "Legal Services of Northern California — Woodland",
+      "phone": "530-662-1065",
+      "cities": ["Davis", "Woodland", "West Sacramento", "Winters"],
+      "counties": ["Yolo"],
+      "zips": ["95616", "95618", "95691", "95695", "95694"],
+      "eligibility": "Free civil legal help for eligible Yolo County residents, including housing. Confirm eligibility at intake.",
+      "source_url": "https://lsnc.net/office/woodland"
+    },
+    {
       "name": "LawHelpCA",
       "eligibility": "Statewide directory of free and low-cost legal aid by county, with tenant guides. Eligibility depends on the organization.",
       "source_url": "https://www.lawhelpca.org/"

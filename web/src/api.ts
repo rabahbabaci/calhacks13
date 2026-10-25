@@ -8,15 +8,58 @@ export type Hazard = {
   frame: string;
   urgent_message?: string | null;
   evidence_ids: string[];
+  photo?: string;
+};
+
+export type LandlordRecord = {
+  id: string;
+  date: string;
+  status: string;
+  title: string;
+  closed: boolean;
+  fix: string;
+  ref?: string;
+};
+
+export type LandlordContact = {
+  name: string;
+  role: string;
+  mailing_address: string;
+  email: string;
+  phone: string;
+  website: string;
+};
+
+export type Landlord = {
+  company: string;
+  initials: string;
+  logo_url: string;
+  contact?: LandlordContact;
+  owner: LandlordContact;
+  manager: LandlordContact;
+  disclaimer: string;
+  summary?: string;
+  open: number;
+  closed: number;
+  records: LandlordRecord[];
 };
 
 export type Tile = {
   id: string;
   title: string;
-  kind: "email" | "form" | "phone";
+  kind: "email" | "form" | "phone" | "evidence";
   status: string;
   needs: string[];
   changed: string;
+  hazard_id?: string;
+  why?: string;
+};
+
+export type StepGroup = {
+  tag: string;
+  label: string;
+  hazards: { hazard_id: string; room: string; location: string; label: string }[];
+  options: { text: string; cites: string[] }[];
 };
 
 export type Home = {
@@ -24,20 +67,28 @@ export type Home = {
   name?: string;
   address?: string;
   fixture?: boolean;
+  live?: boolean;
   layout?: { rooms: Room[] };
+  shell?: { kind: string; scale: string; source_url: string; square_feet?: number | null };
   hazards?: Hazard[];
   tiles?: Tile[];
+  next?: { tile_id: string; kind: string; blurb: string };
+  groups?: StepGroup[];
+  landlord?: Landlord;
   not_visible?: string[];
   runs?: Record<string, string>;
+  analyzing?: boolean;
+  errors?: Record<string, string>;
   tracking?: { messages: Message[]; evidence: { evidence_id: string; kind: string; at: string }[] };
 };
 
 export type Room = {
   id: string;
   name: string;
+  kind?: string;
   polygon: number[][];
   height: number;
-  door: { wall: string; width: number };
+  door: { wall?: string; width: number; center?: number; edge?: number };
   hazards: { hazard_id: string; icon: number[] }[];
 };
 
@@ -64,7 +115,7 @@ export type Preview = {
   note: string;
 };
 
-export type Me = { signed_in: boolean; dev_login: boolean; google: boolean; case_id?: string; name?: string; email?: string };
+export type Me = { signed_in: boolean; dev_login: boolean; google: boolean; live?: boolean; case_id?: string; name?: string; email?: string };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: "include", ...init });
@@ -93,7 +144,7 @@ export const api = {
   },
   hazard: (id: string) => call<HazardDetail>("/api/hazards/" + encodeURIComponent(id)),
   confirm: (id: string) => call<HazardDetail>("/api/hazards/" + encodeURIComponent(id) + "/confirm", { method: "POST" }),
-  clinics: (id: string) => call<Clinics>("/api/hazards/" + encodeURIComponent(id) + "/clinics"),
+  clinics: (id: string, init?: RequestInit) => call<Clinics>("/api/hazards/" + encodeURIComponent(id) + "/clinics", init),
   preview: (id: string) => call<{ id: string; title: string; kind: string; preview: Preview }>("/api/tiles/" + encodeURIComponent(id) + "/preview", { method: "POST" }),
   send: (id: string, to: string) =>
     call<{ status: string; changed: string }>("/api/tiles/" + encodeURIComponent(id) + "/send", {
@@ -101,11 +152,11 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to }),
     }),
-  reply: (who: string, body: string) =>
-    call("/api/tiles/log-reply/reply", {
+  mail: (messages: { gmail_id: string; direction: string; counterparty: string; subject: string; at?: string; body?: string }[]) =>
+    call<Home>("/api/tracking/mail", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ who, body }),
+      body: JSON.stringify({ messages }),
     }),
   filed: (id: string) => call("/api/tiles/" + encodeURIComponent(id) + "/filed", { method: "POST" }),
   evidence: (file: File) => {
@@ -119,23 +170,49 @@ export type HazardDetail = {
   hazard: Hazard;
   blocks: {
     place: { status: string };
-    health: { status: string; risks: string[]; precautions: string[]; see_a_doctor_if: string; disclaimer: string };
+    health: { status: string; error?: string; risks: string[]; precautions: string[]; see_a_doctor_if: string; see_a_doctor?: string[]; disclaimer: string };
     landlord: {
       status: string;
       company: string;
       initials: string;
       logo_url: string;
+      error?: string;
       open: number;
       closed: number;
       records: { id: string; date: string; status: string; title: string; fix: string; closed: boolean }[];
     };
-    law: { status: string; duties: { text: string; cites: string[] }[]; options: { text: string; cites: string[] }[]; disclaimer: string };
+    law: { status: string; error?: string; duties: { text: string; cites: string[] }[]; options: { text: string; cites: string[] }[]; disclaimer: string };
   };
+};
+
+export type ClinicRow = {
+  name: string;
+  address: string;
+  distance_mi: number | null;
+  maps: string;
+  tests: string;
+  assumed?: string;
+  insurance: string;
+  assumed_insurance?: string;
+  funding: string;
+  source_url: string;
+  lat?: number;
+  lon?: number;
+};
+
+export type ClinicGroup = {
+  tag: string;
+  label: string;
+  reason: string;
+  hazards: { hazard_id: string; room: string; location: string; label: string }[];
+  clinics: ClinicRow[];
 };
 
 export type Clinics = {
   note: string;
   reason: string;
   search_url: string;
-  clinics: { name: string; address: string; distance_mi: number | null; maps: string }[];
+  clinics: ClinicRow[];
+  groups?: ClinicGroup[];
+  warming?: boolean;
 };

@@ -250,7 +250,8 @@ def assess_case(case, save=True, client=None):
                     continue
                 if client is None:
                     from anthropic import Anthropic
-                    client = Anthropic()
+                    workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+                    client = Anthropic(default_headers={"anthropic-workspace-id": workspace} if workspace else None)
                 draft, usage = run_llm(client, case, h, chunks, sources)
                 assessment, dropped = validate(hazard, draft, chunks, sources)
                 result["dropped"].extend(dropped)

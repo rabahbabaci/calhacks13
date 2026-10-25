@@ -9,14 +9,15 @@ Output: docs/contracts.md section 7. With saving on, each hazard is one agent_ru
 (agent "legal"): start_run when it begins, finish_run with the section 7 object, or fail_run.
 Cited sources also go to the shared legal_source table.
 
-By default (LEGAL_RESEARCH unset) output comes only from the verified pack, one call per
-hazard; hazards with no pack for the area go to not_assessed as "not verified for your area".
+By default (LEGAL_RESEARCH unset) output comes from the pack, one call per hazard: a
+city pack if one exists, else the statewide pack searched for that city. Hazards with
+no pack for the area go to not_assessed as "not verified for your area".
 LEGAL_RESEARCH=1 adds the research path below, for any US address. The jurisdiction (city,
 county, state) comes from the case, or from the Census geocoder when the case doesn't give it.
 
 Sources, in order of trust:
-  1. The verified jurisdiction pack in data/packs/ (P#, G#, C# ids): a city pack, else a
-     state pack (city ""), else none.
+  1. The jurisdiction pack in data/packs/ (P#, G#, C# ids): a city pack, else the
+     statewide pack (city "") applied to the identified city, else none.
   2. Sources the legal agent already checked for the same state in earlier cases (L# ids),
      read back from the shared legal_source table.
   3. Pages the agent reads through Apify's RAG Web Browser, and CourtListener opinions,
@@ -117,21 +118,43 @@ def drafts_enabled():
 
 
 def find_pack(jurisdiction):
-    """A city pack for this jurisdiction, else a state-wide pack (city ""), else None.
-    Draft packs (status other than "verified") are skipped unless LEGAL_DRAFT_PACKS is on."""
+    """A city pack, else the statewide pack for this state, else None.
+
+    When a city is identified (Davis, Fresno, …) and has no city pack, the state's
+    pack is used and searched for that city: statewide entries apply, plus any pack
+    items that name the city. Draft city packs are skipped unless LEGAL_DRAFT_PACKS
+    is on. A draft statewide pack is still used for an identified city (sources stay
+    unmarked as verified) because state law applies there."""
     state = (jurisdiction or {}).get("state", "").lower()
     city = (jurisdiction or {}).get("city", "").lower()
+    if not state:
+        return None
     state_pack = None
     for path in sorted(PACKS.glob("*.json")):
         pack = json.loads(path.read_text(encoding="utf-8"))
         j = pack.get("jurisdiction", {})
-        if j.get("state", "").lower() != state or (is_draft(pack) and not drafts_enabled()):
+        if j.get("state", "").lower() != state:
             continue
-        if j.get("city", "").lower() == city:
+        pack_city = (j.get("city") or "").lower()
+        if pack_city and pack_city == city:
+            if is_draft(pack) and not drafts_enabled():
+                continue
             return pack
-        if not j.get("city"):
+        if not pack_city:
             state_pack = pack
+    if state_pack and is_draft(state_pack) and not drafts_enabled() and not city:
+        return None
     return state_pack
+
+
+def _item_city(item):
+    return ((item or {}).get("city") or "").strip().lower()
+
+
+def for_city(items, city):
+    """Statewide pack items (no city) plus items that name this city. Other cities drop out."""
+    city = (city or "").strip().lower()
+    return [item for item in items or [] if not _item_city(item) or _item_city(item) == city]
 
 
 def prior_sources(jurisdiction, taken):
@@ -161,9 +184,20 @@ def prior_sources(jurisdiction, taken):
     return out
 
 
-def pack_law(pack, hazard):
-    """The pack's entry for a hazard, following "same_as" (cockroaches -> rodents)."""
-    laws = {h["hazard"]: h for h in (pack or {}).get("hazard_laws", [])}
+def pack_laws(pack, city=""):
+    """Hazard entries from the pack for this city. A city-named entry overrides statewide."""
+    statewide, local = {}, {}
+    for item in for_city((pack or {}).get("hazard_laws", []), city):
+        if _item_city(item):
+            local[item["hazard"]] = item
+        else:
+            statewide[item["hazard"]] = item
+    return {**statewide, **local}
+
+
+def pack_law(pack, hazard, city=""):
+    """The pack's entry for a hazard in this city, following "same_as" (cockroaches -> rodents)."""
+    laws = pack_laws(pack, city)
     law = laws.get(hazard)
     if law and law.get("same_as"):
         target = laws.get(law["same_as"])
@@ -171,19 +205,21 @@ def pack_law(pack, hazard):
     return law
 
 
-def pack_covers(pack, hazard):
-    return pack_law(pack, hazard) is not None
+def pack_covers(pack, hazard, city=""):
+    return pack_law(pack, hazard, city) is not None
 
 
-def pack_sources(pack, hazard):
-    """Number the pack's verified material for one hazard: P# laws, G# general rules, C# city procedures."""
+def pack_sources(pack, hazard, jurisdiction=None):
+    """Number the pack's material for one hazard in this city: P# laws, G# general rules, C# city procedures."""
     sources = {}
     if not pack:
         return sources, None
     j = pack["jurisdiction"]
-    where = ", ".join(x for x in [j.get("city"), j.get("state")] if x)
+    city = (jurisdiction or {}).get("city") or j.get("city") or ""
+    state = (jurisdiction or {}).get("state") or j.get("state") or ""
+    where = ", ".join(x for x in [city, state] if x)
     verified = not is_draft(pack)
-    law = pack_law(pack, hazard)
+    law = pack_law(pack, hazard, city)
     if law:
         sources["P0"] = {
             "cite": f"{'Verified' if verified else 'DRAFT, unverified'} jurisdiction pack ({pack['pack_id']}): {hazard}",
@@ -194,9 +230,9 @@ def pack_sources(pack, hazard):
         }
         for i, c in enumerate(law.get("citations", []), 1):
             sources[f"P{i}"] = {"cite": c["cite"], "url": c["source_url"], "kind": "statute", "verified": verified, "text": c.get("excerpt", "")}
-    for i, rule in enumerate(pack.get("general_rules", []), 1):
+    for i, rule in enumerate(for_city(pack.get("general_rules", []), city), 1):
         sources[f"G{i}"] = {"cite": rule["cite"], "url": rule["source_url"], "kind": "statute", "verified": verified, "text": rule["summary"], "show_as": rule.get("show_as")}
-    for i, proc in enumerate(pack.get("city_procedures", []), 1):
+    for i, proc in enumerate(for_city(pack.get("city_procedures", []), city), 1):
         text = " ".join(x for x in [proc.get("how", ""), proc.get("phone", ""), proc.get("email", "")] if x)
         sources[f"C{i}"] = {"cite": proc["name"], "url": proc["source_url"], "kind": "agency", "verified": verified, "text": text, "show_as": proc.get("show_as")}
     for s in sources.values():
@@ -400,10 +436,17 @@ def describe(case, hazard_obj, pack, sources, law, deep=False):
         "",
     ]
     if pack:
+        pack_city = (pack.get("jurisdiction") or {}).get("city") or ""
+        case_city = (case.get("jurisdiction") or {}).get("city") or ""
         if is_draft(pack):
             lines.append(f"DRAFT jurisdiction pack {pack['pack_id']} (not yet verified; local testing only):")
         else:
             lines.append(f"Verified jurisdiction pack {pack['pack_id']} (verified {pack.get('verified_on')}):")
+        if not pack_city and case_city:
+            lines.append(
+                f"This is the statewide pack searched for {case_city}. Statewide entries apply in this city, "
+                "plus any pack items that name it. Do not add local ordinances that are not in the pack."
+            )
         for sid, s in sources.items():
             extra = f" [{s['show_as']}]" if s.get("show_as") else ""
             lines.append(f"- {sid}{extra}: {s['cite']} — {s['text']}")
@@ -499,12 +542,17 @@ def assess_case(case, save=True, client=None, research=None):
         ensure_case(case)
     deep = research_enabled()
     confirmed = [h for h in case.get("hazards", []) if float(h.get("confidence", 0)) >= MIN_CONFIDENCE or h.get("confirmed_by_tenant")]
-    # Without research, only hazards the verified pack covers get an assessment.
-    to_assess = confirmed if deep else [h for h in confirmed if pack_covers(pack, h["hazard"])]
+    city = (case.get("jurisdiction") or {}).get("city") or ""
+    # Without research, only hazards the pack covers for this city get an assessment.
+    to_assess = confirmed if deep else [h for h in confirmed if pack_covers(pack, h["hazard"], city)]
     if to_assess and client is None:
         from anthropic import Anthropic
 
-        client = Anthropic(api_key=env("ANTHROPIC_API_KEY_Legal"))
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+        client = Anthropic(
+            api_key=env("ANTHROPIC_API_KEY_Legal"),
+            default_headers={"anthropic-workspace-id": workspace} if workspace else None,
+        )
     if to_assess and research is None and deep:
         research = Research(env("APIFY_TOKEN_Legal"), env("COURTLISTENER_TOKEN_Legal", required=False))
     for h in case.get("hazards", []):
@@ -512,7 +560,7 @@ def assess_case(case, save=True, client=None, research=None):
         if float(h.get("confidence", 0)) < MIN_CONFIDENCE and not h.get("confirmed_by_tenant"):
             result["not_assessed"].append({"hazard": hazard, "reason": "low confidence and not confirmed by tenant"})
             continue
-        if not deep and not pack_covers(pack, hazard):
+        if not deep and not pack_covers(pack, hazard, city):
             result["not_assessed"].append({"hazard": hazard, "reason": NOT_VERIFIED})
             continue
         if save:
@@ -535,7 +583,7 @@ def assess_hazard(case, h, pack, result, client, research):
     """Research, draft and validate one hazard. Returns the section 7 object."""
     hazard = h["hazard"]
     t0 = time.time()
-    sources, law = pack_sources(pack, hazard)
+    sources, law = pack_sources(pack, hazard, case.get("jurisdiction"))
     if research_enabled():
         sources.update(prior_sources(case.get("jurisdiction"), sources))
     draft, usage = run_llm(client, research, case, h, pack, sources, law)

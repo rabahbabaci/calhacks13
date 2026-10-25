@@ -1,6 +1,8 @@
 """Email transport. Tests use MemoryMailer, which records the message and sends nothing.
 
-Gmail is a separate transport and is not constructed unless GMAIL_SEND=1. That path is not enabled.
+The browser sends the landlord email on Send with the Gmail grant from Google sign-in,
+then this mailer only records that it went out. If that grant is missing, the browser
+opens the tenant's mail app with the same draft.
 """
 
 

@@ -132,11 +132,11 @@ Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_
 
 `agents/legal/agent.py`. Same input as the health agent (section 3) and the same confidence rule: hazards below 0.5 that the tenant hasn't confirmed go to `not_assessed`.
 
-**Default: verified pack only.** Each hazard the pack covers gets one Claude call that writes from the pack's `P#`, `G#` and `C#` sources only (no web research, about 10 s per hazard). `similar_cases` is empty. A hazard with no pack for the area, or one the pack doesn't cover, goes to `not_assessed` with reason `"not verified for your area"`; with no pack, `legal_aid` is empty. Set `LEGAL_RESEARCH=1` to turn on the research path described next (slower; it adds Apify research, CourtListener and `L#` prior sources, and sends back once a submit with no similar cases).
+**Default: pack only.** Pack lookup is a city pack, else the statewide pack (`"city": ""`) searched for the identified city (statewide entries plus any items that name that city), else none. Each hazard the pack covers gets one Claude call that writes from the pack's `P#`, `G#` and `C#` sources only (no web research, about 10 s per hazard). `similar_cases` is empty. A hazard with no pack for the area, or one the pack doesn't cover, goes to `not_assessed` with reason `"not verified for your area"`; with no pack, `legal_aid` is empty. Set `LEGAL_RESEARCH=1` to turn on the research path described next (slower; it adds Apify research, CourtListener and `L#` prior sources, and sends back once a submit with no similar cases).
 
-**Draft packs.** A pack whose `status` is anything other than `"verified"` (packs with no `status` count as verified) is skipped, so its law is never shown as verified. `data/packs/ca.json` is a draft California state pack (`"status": "draft_needs_verification"`); once a person checks every excerpt against its `source_url`, set `status` to `"verified"` and fill `verified_on`. `LEGAL_DRAFT_PACKS=1` uses draft packs for local testing, with their sources marked unverified.
+**Draft packs.** A city pack whose `status` is anything other than `"verified"` (packs with no `status` count as verified) is skipped, so its law is never shown as verified. `data/packs/ca.json` is a draft California state pack (`"status": "draft_needs_verification"`). For an identified city with no city pack (Davis, Fresno, …) that statewide pack is still used and searched for the city; its sources stay unmarked as verified until a person checks every excerpt against its `source_url` and sets `status` to `"verified"`. `LEGAL_DRAFT_PACKS=1` also uses draft city packs for local testing.
 
-**With `LEGAL_RESEARCH=1`, any US address.** If the case's `jurisdiction` lacks a state or city, the agent fills it (and the county) from the Census geocoder (`data/geocode.py`). Pack lookup is a city pack, else a state-wide pack (`"city": ""`), else none. Without a pack the agent researches the state's landlord-tenant statute and the local housing code itself, and gets the state's CourtListener court id. Sources it verified in earlier cases in the same state are read back from `legal_source` and offered as `L#` ids (state statutes, regulations and cases from anywhere in the state; ordinances and agency pages only for the same city).
+**With `LEGAL_RESEARCH=1`, any US address.** If the case's `jurisdiction` lacks a state or city, the agent fills it (and the county) from the Census geocoder (`data/geocode.py`). Pack lookup is the same city-then-state search. Without a pack the agent researches the state's landlord-tenant statute and the local housing code itself, and gets the state's CourtListener court id. Sources it verified in earlier cases in the same state are read back from `legal_source` and offered as `L#` ids (state statutes, regulations and cases from anywhere in the state; ordinances and agency pages only for the same city).
 
 **Runs.** One `agent_run` row per hazard with agent `legal`: `start_run(case_id, "legal", hazard)` when it begins, then `finish_run` with the object below as `payload_json`, or `fail_run` with the error. If the case isn't in `case_file` yet, the agent creates it from its input with `create_case`.
 
@@ -265,7 +265,7 @@ Not covered: owner names where the county doesn't publish them (California parce
   "address": "1510 Webster St, Oakland, CA 94612",
   "matched_address": "1510 WEBSTER ST, OAKLAND, CA, 94612",
   "jurisdiction": {"city": "Oakland", "county": "Alameda County", "state": "CA", "zip": "94612"},
-  "owner": {"name": "...", "role": "owner", "mailing_address": "...", "data_id": "D4"},
+  "owner": {"name": "...", "role": "company", "mailing_address": "...", "email": "...", "phone": "...", "website": "...", "data_id": "D4"},
   "manager": null,
   "records": [{"id": "R1", "kind": "violation", "title": "...", "date": "2026-09-24", "status": "open", "detail": "...", "ref": "2606350", "data_id": "D3"}],
   "patterns": [{"text": "...", "record_ids": ["R1", "R4"]}],
@@ -282,7 +282,7 @@ Rules, enforced in `agents/property/validate.py`:
 - Every fetched result gets a data id (`D#`). A record is kept only if it cites one and that result's raw text contains the record's `ref` or its date (ISO, US style or ArcGIS epoch milliseconds).
 - Findings (`patterns`, `unresolved`) must cite kept records.
 - The report is about real people and companies, so findings or a summary that accuse anyone ("illegal", "negligent", "slumlord", "bad faith", ...) are dropped.
-- `owner` and `manager` are kept only if the name appears in the data they cite.
+- `owner` and `manager` are kept only if the name (or mailing address) appears in the data they cite. A company, LLC or apartment community is a valid landlord; no individual is required. When that party is a company, the agent searches for official contact and keeps `email`, `phone` and `website` only if a fetched page states them.
 - Queries go only to public https hostnames: Socrata dataset ids and ArcGIS layer paths are checked, and IP addresses and localhost are refused.
 
 The CLI prints `{case_id, report, dropped, usage}`. Show `report` to the tenant; `dropped` and `usage` are internal.
@@ -293,7 +293,7 @@ Tests: `data/.venv/bin/python -m unittest discover -s agents/property -p "test_*
 
 ## 10. Tenant app (proposed)
 
-The website and iPhone shell (`web/`, `tenant/`). No new SpacetimeDB table: `packet` and `action` are already agent names, and the screens below are computed in code. Fixture mode does not write to the database. Live saves stay on the section 6 reducers once a run is allowed.
+The website and iPhone shell (`web/`, `tenant/`). No new SpacetimeDB table: `packet` and `action` are already agent names, and the screens below are computed in code. Fixture mode does not write to the database and does not call Claude. `HOME_LIVE=1` runs the property and plan agents on onboarding and health plus legal after confirm, in the tenant API, without starting the orchestrator. Rooms still come from the saved walkthrough until a video finishes vision. `HOME_LIVE_SAVE=1` writes those runs through the section 6 reducers; the default live path keeps results in memory only.
 
 **layout**, from the vision report, stored with the case only in the app for now:
 
@@ -338,3 +338,27 @@ A section with no known source id is dropped. The legal pack's never_say rules a
 ```
 
 `role` is `landlord`, `legal_aid`, or `agency`. A sent landlord email marks that tile done and adds "Log their reply" until an inbound landlord message exists.
+
+**clinics**, from `GET /api/hazards/{id}/clinics`. The ZIP lookup runs before the tenant confirms. The reason text stays empty until confirm, because health text stays hidden until then. With no cited file, the result is the HRSA search URL and an empty clinic list. Home does not invent clinic names. `tenant/out/clinics_<zip>.json`, written only by `python -m tenant.clinics_live`, is served as a directory of cited centers. The list keeps a center when primary care usually orders a blood lead test the peeling-paint defect needs, or when the site states mold or allergy. Allergy and ear, nose, and throat offices come from the NPI registry when the practice-location ZIP is the entered California ZIP or a neighboring ZIP within 5 miles. Medi-Cal and Medicare are listed for a medical health center, or when the office NPI is on the DHCS or CMS enrollment file. The payload also groups those centers by hazard tag. The opened problem is first. A center can appear under more than one problem when it matches more than one test. Apify runs only when `HOME_CLINICS_LIVE=1`. Clinic links are not filing.
+
+## 11. Plan agent output (proposed)
+
+The plan agent (`agents/plan/`) builds the 3D shell for one address. One `agent_run` row, agent `plan`, hazard `""`. `plan` is in the section 6 agent list. The model does not publish the module for this agent.
+
+```json
+{
+  "address": "1510 Webster St, Oakland, CA 94612",
+  "source_url": "https://example.com/plan.png",
+  "shell": "plan",
+  "scale": "door",
+  "square_feet": 800,
+  "rooms": [{"id": "room_0", "name": "kitchen", "polygon": [[0, 0], [4, 0], [4, 3.5], [0, 3.5]],
+             "height": 2.6, "door": {"wall": "south", "center": 0.5, "width": 0.9}, "seen": true}],
+  "placements": [{"hazard_id": "dampness_mold|kitchen counter", "room_id": "room_0", "icon": [2.0, 1.4, 3.1]}],
+  "disclaimer": "The shell is a floor plan or a row of boxes sized from a listing, not a survey."
+}
+```
+
+`shell` is `plan` (a traced line drawing), `listing` (boxes sized from a cited square footage), or `schematic` (the fixed 4 m by 3.5 m walk). `scale` is `drawing`, `door`, or `fixed`. `source_url` is set only for `plan`. A square footage or a plan URL with no snippet in a fetched page is dropped. `dropped` and `usage` stay internal.
+
+Vision hazards are placed into the room with the same name. A vision room that matches nothing is an extra box. A plan room the video never entered has `seen: false`. With no plan and no cited area, the shell is the section 10 schematic.

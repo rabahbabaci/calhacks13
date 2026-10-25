@@ -114,9 +114,9 @@
   ],
 
   "legal_aid": [
-    {"name": "Centro Legal de la Raza", "phone": "510-437-1554", "email": "tenantsrights@centrolegal.org", "eligibility": "Free tenant legal services per the City of Oakland referral page. Confirm eligibility at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Tenant-Resources"},
-    {"name": "East Bay Community Law Center", "phone": "510-548-4040", "eligibility": "Counseling and paperwork help for low-income tenants; free workshops. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"},
-    {"name": "Bay Area Legal Aid", "phone": "800-551-5554", "eligibility": "Help for low-income people with unsafe housing, evictions, lockouts, utility shutoffs. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"}
+    {"name": "Centro Legal de la Raza", "phone": "510-437-1554", "cities": ["Oakland"], "email": "tenantsrights@centrolegal.org", "eligibility": "Free tenant legal services per the City of Oakland referral page. Confirm eligibility at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Tenant-Resources"},
+    {"name": "East Bay Community Law Center", "phone": "510-548-4040", "cities": ["Oakland", "Berkeley"], "eligibility": "Counseling and paperwork help for low-income tenants; free workshops. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"},
+    {"name": "Bay Area Legal Aid", "phone": "800-551-5554", "cities": ["Oakland"], "eligibility": "Help for low-income people with unsafe housing, evictions, lockouts, utility shutoffs. Confirm at intake.", "source_url": "https://www.oaklandca.gov/Community/Housing-Programs-Support/Tenant-Rights-Protection/Contact-Local-Housing-Advocacy-Organizations"}
   ],
 
   "unverified_do_not_encode": [

@@ -11,6 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import agent  # noqa: E402
+import contact as corp  # noqa: E402
 import sources as src  # noqa: E402
 from geocode import parse_house_number  # noqa: E402
 from known import hints_for  # noqa: E402
@@ -101,7 +102,97 @@ class ValidateTest(unittest.TestCase):
     def test_owner_by_mailing_address_when_no_name_is_published(self):
         raw = {"D1": json.dumps([{"FULL_OWNERADDRESS": "411 2ND ST OAKLAND CA 94607"}])}
         out, _ = validate({"owner": {"name": "Unknown LLC", "mailing_address": "411 2nd St Oakland CA 94607", "data_id": "D1"}}, raw)
-        self.assertEqual(out["owner"], {"name": "", "role": "", "mailing_address": "411 2nd St Oakland CA 94607", "data_id": "D1"})
+        self.assertEqual(out["owner"]["name"], "")
+        self.assertEqual(out["owner"]["mailing_address"], "411 2nd St Oakland CA 94607")
+        self.assertEqual(out["owner"]["data_id"], "D1")
+
+    def test_company_contact_stays_when_the_cited_page_states_it(self):
+        raw = {"D4": "DaVinci Apartments leasing office (530) 757-2800 leasing@davinci-apts.com https://davinciapartments.com"}
+        out, _ = validate({
+            "owner": {
+                "name": "DaVinci Apartments", "role": "company", "data_id": "D4",
+                "email": "leasing@davinci-apts.com", "phone": "(530) 757-2800",
+                "website": "https://davinciapartments.com",
+            }
+        }, raw)
+        self.assertEqual(out["owner"]["name"], "DaVinci Apartments")
+        self.assertEqual(out["owner"]["email"], "leasing@davinci-apts.com")
+        self.assertEqual(out["owner"]["phone"], "(530) 757-2800")
+        self.assertEqual(out["owner"]["website"], "https://davinciapartments.com")
+
+    def test_company_contact_is_cleared_when_not_in_the_cited_data(self):
+        out, _ = validate({
+            "owner": {
+                "name": "1106 Remsen Realty LLC", "data_id": "D3",
+                "email": "invented@example.com", "phone": "(555) 010-0000",
+            }
+        }, RAW)
+        self.assertEqual(out["owner"]["email"], "")
+        self.assertEqual(out["owner"]["phone"], "")
+
+
+class CompanyContactTest(unittest.TestCase):
+    def test_company_names_do_not_need_a_person(self):
+        self.assertTrue(corp.is_corporate("DaVinci Apartments"))
+        self.assertTrue(corp.is_corporate("FPI Management, Inc."))
+        self.assertTrue(corp.is_corporate("1106 Remsen Realty LLC"))
+        self.assertFalse(corp.is_corporate("Jane Smith"))
+        self.assertFalse(corp.is_corporate(""))
+
+    def test_extracts_official_contact_from_a_page(self):
+        text = "Lease at DaVinci Apartments. Call (530) 757-2800 or email leasing@davinci-apts.com"
+        got = corp.extract_contact(text, "https://www.davinciapartments.com/contact")
+        self.assertEqual(got["phone"], "(530) 757-2800")
+        self.assertEqual(got["email"], "leasing@davinci-apts.com")
+        self.assertEqual(got["website"], "https://www.davinciapartments.com")
+        self.assertEqual(got.get("mailing_address") or "", "")
+
+    def test_extracts_mailing_address_when_the_page_labels_it(self):
+        text = "Mailing address: 800 Iron Point Road, Folsom, CA 95630. Call (916) 555-0148"
+        got = corp.extract_contact(text, "https://www.fpimgt.com/contact")
+        self.assertEqual(got["mailing_address"], "800 Iron Point Road, Folsom, CA 95630")
+        self.assertEqual(got["website"], "https://www.fpimgt.com")
+
+    def test_skips_noreply_and_directory_hosts(self):
+        text = "noreply@davinci-apts.com privacy@wixpress.com (555) 010-1234"
+        got = corp.extract_contact(text, "https://www.apartments.com/davinci-davis")
+        self.assertEqual(got["email"], "")
+        self.assertEqual(got["phone"], "")
+        self.assertEqual(got["website"], "")
+
+    def test_fill_uses_already_fetched_text_and_does_not_invent_a_person(self):
+        sources = FakeSources()
+        sources.results["D9"] = "DaVinci Apartments office (530) 757-2800 leasing@davinci-apts.com https://davinciapartments.com"
+        report = {"owner": {"name": "DaVinci Apartments", "role": "", "mailing_address": "", "data_id": "D9"}}
+        corp.fill_company_contact(report, sources, {"city": "Davis", "state": "CA"})
+        self.assertEqual(report["owner"]["name"], "DaVinci Apartments")
+        self.assertEqual(report["owner"]["role"], "company")
+        self.assertEqual(report["owner"]["phone"], "(530) 757-2800")
+        self.assertEqual(report["owner"]["email"], "leasing@davinci-apts.com")
+        self.assertNotIn("Jane", report["owner"]["name"])
+
+    def test_fill_searches_when_records_only_have_the_company_name(self):
+        sources = FakeSources()
+        sources.web.search = lambda query, max_results=3: [{
+            "url": "https://www.davinciapartments.com/contact",
+            "title": "DaVinci Apartments",
+            "text": "Leasing office (530) 757-2800 leasing@davinci-apts.com",
+        }]
+        report = {"owner": {"name": "DaVinci Apartments", "role": "company", "data_id": "D1"}}
+        corp.fill_company_contact(report, sources, {"city": "Davis", "state": "CA"})
+        self.assertEqual(report["owner"]["phone"], "(530) 757-2800")
+        self.assertEqual(report["owner"]["email"], "leasing@davinci-apts.com")
+        self.assertEqual(report["owner"]["website"], "https://www.davinciapartments.com")
+        self.assertTrue(any("leasing@davinci-apts.com" in str(v) for v in sources.results.values()))
+
+    def test_person_owner_is_not_looked_up(self):
+        sources = FakeSources()
+        called = []
+        sources.web.search = lambda *a, **k: called.append(a) or []
+        report = {"owner": {"name": "Jane Smith", "role": "owner"}}
+        corp.fill_company_contact(report, sources, {"city": "Davis", "state": "CA"})
+        self.assertEqual(called, [])
+        self.assertEqual(report["owner"], {"name": "Jane Smith", "role": "owner"})
 
 
 class SourceChecksTest(unittest.TestCase):

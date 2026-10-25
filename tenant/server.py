@@ -1,7 +1,8 @@
 """HTTP API for the tenant app. The browser never calls SpacetimeDB.
 
 Fixture mode stores an uploaded video and builds the model from the saved walkthrough.
-It does not call Claude, Gmail, Apify, or the Census geocoder.
+It does not call Claude, Gmail, or the Census geocoder. Apify stays off unless
+HOME_CLINICS_LIVE=1, and then only the clinics lookup uses it.
 
     data/.venv/bin/python -m tenant.server
 """
@@ -10,6 +11,7 @@ import os
 import re
 import secrets
 import sys
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -19,9 +21,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tenant.auth import google_client_id as env_client_id, verify_google_token  # noqa: E402
+from tenant.live import live_enabled, load_env, start_after_confirm, start_after_onboard  # noqa: E402
 from tenant.mailer import MemoryMailer  # noqa: E402
 from tenant.pdfdoc import build_pdf  # noqa: E402
-from tenant.view import clinics_payload, hazard_payload, home_payload, new_case, tile_by_id  # noqa: E402
+from tenant.snapshot import jpeg as hazard_jpeg  # noqa: E402
+from tenant.packet import thread_messages  # noqa: E402
+from tenant.view import clinics_payload, hazard_payload, home_payload, ingest_mail, new_case, tile_by_id, warm_clinics  # noqa: E402
 
 MEDIA = ROOT / "tenant" / "out" / "media"
 COOKIE = "home={token}; Path=/; HttpOnly; SameSite=Lax"
@@ -46,11 +51,17 @@ class AppState:
         return self.users.get(sub) if sub else None
 
     def sign_in(self, sub, email, name):
-        """Create a session for a user. Repeat sign-ins keep the existing user and case."""
+        """Create a session. Each sign-in starts a new case so the full analysis runs from scratch."""
         token = secrets.token_urlsafe(24)
         self.sessions[token] = sub
-        self.users.setdefault(sub, {"sub": sub, "email": email, "name": name, "case_id": ""})
-        return token, self.users[sub]
+        user = self.users.setdefault(sub, {"sub": sub, "email": email, "name": name, "case_id": ""})
+        user["email"] = email
+        user["name"] = name
+        old = user.get("case_id") or ""
+        if old:
+            self.cases.pop(old, None)
+            user["case_id"] = ""
+        return token, user
 
     def case_for(self, user):
         if not user or not user.get("case_id"):
@@ -95,7 +106,7 @@ def _save_media(case, upload, kind):
     evidence_id = f"{kind}_{len(case['media']) + 1}"
     path = MEDIA / f"{case['case_id']}_{evidence_id}_{safe}"
     path.write_bytes(upload["bytes"])
-    case["media"].append({"evidence_id": evidence_id, "filename": safe})
+    case["media"].append({"evidence_id": evidence_id, "filename": safe, "path": str(path)})
     return evidence_id
 
 
@@ -140,10 +151,10 @@ def make_handler(state):
                 user = state.user_for(self._token())
                 google = bool(state.google_client_id)
                 if not user:
-                    self._reply(200, {"signed_in": False, "dev_login": state.dev_login, "google": google})
+                    self._reply(200, {"signed_in": False, "dev_login": state.dev_login, "google": google, "live": live_enabled()})
                     return
-                self._reply(200, {"signed_in": True, "dev_login": state.dev_login, "google": google, "name": user["name"],
-                                  "email": user["email"], "case_id": user.get("case_id") or ""})
+                self._reply(200, {"signed_in": True, "dev_login": state.dev_login, "google": google, "live": live_enabled(),
+                                  "name": user["name"], "email": user["email"], "case_id": user.get("case_id") or ""})
                 return
             user, case = self._user_case()
             if user is None:
@@ -153,6 +164,17 @@ def make_handler(state):
                     self._reply(200, {"needs_onboarding": True, "name": user["name"]})
                     return
                 self._reply(200, {"needs_onboarding": False, **home_payload(case)})
+                return
+            photo = re.fullmatch(r"/api/hazards/([^/]+)/photo", path)
+            if photo:
+                if case is None:
+                    self._reply(400, {"error": "Add your address first."})
+                    return
+                body, err = hazard_jpeg(case, photo.group(1))
+                if body is None:
+                    self._reply(404, {"error": err})
+                    return
+                self._send(200, body, "image/jpeg")
                 return
             hazard = re.fullmatch(r"/api/hazards/([^/]+)", path)
             if hazard:
@@ -167,7 +189,16 @@ def make_handler(state):
                 if case is None:
                     self._reply(400, {"error": "Add your address first."})
                     return
-                payload = clinics_payload(case, clinics.group(1))
+                try:
+                    payload = clinics_payload(case, clinics.group(1))
+                except Exception as exc:
+                    payload = {
+                        "note": f"Nearby testing could not be loaded. {type(exc).__name__}: {exc}"[:240],
+                        "reason": "",
+                        "search_url": "",
+                        "clinics": [],
+                        "groups": [],
+                    }
                 self._reply(404 if payload is None else 200, payload or {"error": "Unknown hazard."})
                 return
             pdf = re.fullmatch(r"/api/tiles/([^/]+)/packet.pdf", path)
@@ -230,6 +261,8 @@ def make_handler(state):
                     _save_media(case, files["video"], "video")
                 state.cases[case["case_id"]] = case
                 user["case_id"] = case["case_id"]
+                start_after_onboard(case)
+                warm_clinics(case)
                 self._reply(200, {"needs_onboarding": False, **home_payload(case)})
                 return
             if case is None:
@@ -242,6 +275,7 @@ def make_handler(state):
                     self._reply(404, {"error": "Unknown hazard."})
                     return
                 case["confirmed"][hid] = True
+                start_after_confirm(case, hid)
                 self._reply(200, hazard_payload(case, hid))
                 return
             preview = re.fullmatch(r"/api/tiles/([^/]+)/preview", path)
@@ -275,12 +309,13 @@ def make_handler(state):
                     "subject": record["subject"],
                     "status": "sent",
                     "gmail_id": record["gmail_id"],
-                    "at": "just now",
+                    "at": datetime.now(timezone.utc).isoformat(),
                     "tile_id": tile["id"],
+                    "body": tile["preview"].get("body") or "",
                 })
                 updated = tile_by_id(case, tile["id"])
                 self._reply(200, {"status": updated["status"], "changed": updated["changed"],
-                                  "tracking": {"messages": case["messages"], "evidence": case["evidence"]}})
+                                  "tracking": {"messages": thread_messages(case["messages"]), "evidence": case["evidence"]}})
                 return
             reply = re.fullmatch(r"/api/tiles/([^/]+)/reply", path)
             if reply:
@@ -321,6 +356,14 @@ def make_handler(state):
                 updated = tile_by_id(case, tile_id)
                 self._reply(200, {"status": updated["status"], "changed": updated["changed"]})
                 return
+            if path == "/api/tracking/mail":
+                try:
+                    incoming = json.loads(body or b"{}")
+                except json.JSONDecodeError:
+                    incoming = {}
+                ingest_mail(case, incoming.get("messages") or [])
+                self._reply(200, home_payload(case))
+                return
             if path == "/api/tracking/evidence":
                 _fields, files = parse_multipart(body, self.headers.get("Content-Type"))
                 upload = files.get("file")
@@ -343,6 +386,7 @@ def serve(host="127.0.0.1", port=8787, state=None):
 
 
 def main():
+    load_env()
     port = int(os.environ.get("HOME_PORT", "8787"))
     state = AppState()
     if state.google_client_id:
@@ -351,8 +395,9 @@ def main():
         except ImportError:
             sys.exit("GOOGLE_CLIENT_ID is set but google-auth is missing: data/.venv/bin/pip install -r tenant/requirements.txt")
     httpd = serve(port=port, state=state)
+    mode = "live mode: property on onboard, health and legal after confirm" if live_enabled() else "fixture mode, no Claude calls"
     sign_in = "Google sign-in on" if state.google_client_id else "Google sign-in off (no GOOGLE_CLIENT_ID)"
-    print(f"Home API on http://127.0.0.1:{port} (fixture mode, no Claude calls). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
+    print(f"Home API on http://127.0.0.1:{port} ({mode}). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
     httpd.serve_forever()
 
 

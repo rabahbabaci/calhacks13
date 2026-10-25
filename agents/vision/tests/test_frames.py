@@ -40,7 +40,7 @@ def static_video(tmp_path_factory):
 
 def test_cap_and_even_spacing(distinct_video, tmp_path):
     frames, stats = fr.extract_video(distinct_video, tmp_path, max_frames=12)
-    assert stats["sampled"] == 20 and stats["after_dedupe"] == 20
+    assert stats["sampled"] == 12 and stats["after_dedupe"] == 12
     assert len(frames) == 12
     times = [f["t_s"] for f in frames]
     assert times[0] == 0 and times[-1] == 19
@@ -83,6 +83,15 @@ def test_photos_get_photo_ids(tmp_path):
 def test_bad_segment_rejected(distinct_video, tmp_path):
     with pytest.raises(ValueError):
         fr.extract_video(distinct_video, tmp_path, start=10, end=5)
+
+
+def test_sample_times_cap_and_segment():
+    assert fr._sample_times(0, 20, 12)[0] == 0
+    assert fr._sample_times(0, 20, 12)[-1] == 19
+    assert len(fr._sample_times(0, 20, 12)) == 12
+    assert fr._sample_times(5, 10, 12) == [5, 6, 7, 8, 9]
+    assert len(fr._sample_times(0, 60, 20)) == 20
+    assert fr._sample_times(0, 60, 20)[-1] == 59
 
 
 def test_pick_evenly():

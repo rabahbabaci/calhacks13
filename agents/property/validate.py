@@ -8,6 +8,8 @@ Findings ({text, record_ids}) must cite kept records. The report is about real p
 companies, so findings that accuse anyone (illegal, slumlord, fraud, ...) are dropped:
 the report says what the records show and leaves conclusions to the tenant and legal aid.
 The owner and manager must appear, as written, in the result they cite.
+A company name is a valid landlord; email, phone and website stay only if they
+appear in that cited result.
 """
 import re
 from datetime import datetime, timezone
@@ -66,22 +68,49 @@ def check_record(record, results):
     return clean, None
 
 
+def _digits(value):
+    return re.sub(r"\D", "", value or "")
+
+
+def _phone_in(phone, raw):
+    d = _digits(phone)
+    if len(d) == 11 and d.startswith("1"):
+        d = d[1:]
+    return len(d) == 10 and d in _digits(raw)
+
+
 def check_party(party, results):
-    """Owner or manager. Its name, or its mailing address when no name is published, must
-    appear in the result it cites; anything not found there is cleared."""
+    """Owner or manager. A company name is enough; no individual is required.
+    Name or mailing address must appear in the cited result. Email, phone and
+    website stay only when that same result states them."""
     if not party:
         return None
     data_id = str(party.get("data_id", "")).strip()
     if data_id not in results:
         return None
-    raw = results[data_id].lower()
+    raw = results[data_id]
+    raw_l = raw.lower()
     name = str(party.get("name", "")).strip()
     mailing = str(party.get("mailing_address", "")).strip()
-    name = name if name and name.lower() in raw else ""
-    mailing = mailing if mailing and mailing.lower() in raw else ""
+    name = name if name and name.lower() in raw_l else ""
+    mailing = mailing if mailing and mailing.lower() in raw_l else ""
     if not name and not mailing:
         return None
-    return {"name": name, "role": str(party.get("role", "")).strip(), "mailing_address": mailing, "data_id": data_id}
+    email = str(party.get("email", "")).strip()
+    email = email if email and email.lower() in raw_l else ""
+    phone = str(party.get("phone", "")).strip()
+    phone = phone if phone and _phone_in(phone, raw) else ""
+    website = str(party.get("website", "")).strip()
+    website = website if website and website.lower() in raw_l else ""
+    return {
+        "name": name,
+        "role": str(party.get("role", "")).strip(),
+        "mailing_address": mailing,
+        "email": email,
+        "phone": phone,
+        "website": website,
+        "data_id": data_id,
+    }
 
 
 def validate(draft, results):

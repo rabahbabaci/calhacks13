@@ -73,25 +73,51 @@ class PackTest(unittest.TestCase):
 
 
 class DraftPackTest(unittest.TestCase):
-    """data/packs/ca.json is a draft: it must not be used as verified law until a person checks it."""
+    """data/packs/ca.json is a draft: city packs stay skipped; the state pack is used for an identified city."""
 
     CA = json.loads((agent.PACKS / "ca.json").read_text(encoding="utf-8"))
     FRESNO = {"state": "CA", "city": "Fresno"}
+    DAVIS = {"state": "CA", "city": "Davis"}
 
-    def test_draft_state_pack_is_skipped_by_default(self):
+    def test_identified_city_uses_statewide_pack(self):
         with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
-            self.assertIsNone(agent.find_pack(self.FRESNO))
+            self.assertEqual(agent.find_pack(self.FRESNO)["pack_id"], "ca")
+            self.assertEqual(agent.find_pack(self.DAVIS)["pack_id"], "ca")
             self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
+            self.assertIsNone(agent.find_pack({"state": "CA", "city": ""}))
 
-    def test_draft_pack_can_be_turned_on_and_is_labelled(self):
+    def test_draft_pack_sources_are_labelled_and_scoped_to_the_city(self):
         with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
             pack = agent.find_pack(self.FRESNO)
             self.assertEqual(pack["pack_id"], "ca")
             self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
-        sources, law = agent.pack_sources(pack, "dampness_mold")
+        sources, law = agent.pack_sources(pack, "dampness_mold", self.DAVIS)
         self.assertFalse(any(s["verified"] for s in sources.values()))
         self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
-        self.assertTrue(all(s["jurisdiction"] == "CA" for s in sources.values()))
+        self.assertTrue(all(s["jurisdiction"] == "Davis, CA" for s in sources.values()))
+        self.assertEqual(law["hazard"], "dampness_mold")
+
+    def test_state_pack_keeps_city_named_entries_and_drops_other_cities(self):
+        pack = {
+            **self.CA,
+            "city_procedures": [
+                {"name": "Statewide inspection", "how": "File with local code enforcement", "source_url": "https://example.com/ca"},
+                {"name": "Davis code", "city": "Davis", "how": "File with the City of Davis", "source_url": "https://example.com/davis"},
+                {"name": "Fresno code", "city": "Fresno", "how": "File with Fresno", "source_url": "https://example.com/fresno"},
+            ],
+            "hazard_laws": [
+                *self.CA["hazard_laws"],
+                {"hazard": "water_leak", "city": "Davis", "landlord_duty": "Davis overlay", "citations": [{"cite": "Davis MC 1", "source_url": "https://example.com/d", "excerpt": "leak"}], "tenant_options": [], "deadline_note": "", "cautions": []},
+            ],
+        }
+        sources, law = agent.pack_sources(pack, "water_leak", self.DAVIS)
+        self.assertEqual(law["landlord_duty"], "Davis overlay")
+        cites = {s["cite"] for s in sources.values()}
+        self.assertIn("Davis code", cites)
+        self.assertIn("Statewide inspection", cites)
+        self.assertNotIn("Fresno code", cites)
+        _, fresno = agent.pack_sources(pack, "water_leak", self.FRESNO)
+        self.assertNotEqual(fresno.get("landlord_duty"), "Davis overlay")
 
     def test_ca_pack_matches_the_oakland_format(self):
         oakland = agent.find_pack(OAKLAND)
@@ -402,6 +428,18 @@ class PackOnlyDefaultTest(unittest.TestCase):
         self.assertEqual((out["assessments"], out["legal_aid"], out["pack_id"]), ([], [], None))
         self.assertEqual(client.requests, [])
         self.assertNotIn("start_run", [n for n, _ in calls])
+
+    def test_california_city_uses_state_pack_instead_of_not_verified(self):
+        case = {"case_id": "davis_1", "address": "1666 Da Vinci Ct, Davis, CA 95618",
+                "jurisdiction": {"state": "CA", "city": "Davis"},
+                "hazards": [{"hazard": "water_leak", "location": "hallway", "confidence": 0.9, "confirmed_by_tenant": True}]}
+        out, calls, client, _ = self.run_case(case)
+        self.assertEqual(out["pack_id"], "ca")
+        self.assertEqual(out["not_assessed"], [])
+        self.assertEqual(out["assessments"][0]["hazard"], "water_leak")
+        self.assertTrue(client.requests)
+        self.assertIn("searched for Davis", client.requests[0]["messages"][0]["content"])
+        self.assertEqual([n for n, _ in calls if n in ("start_run", "finish_run")], ["start_run", "finish_run"])
 
     def test_hazard_missing_from_the_pack_is_not_verified(self):
         pack = {**agent.find_pack(OAKLAND), "hazard_laws": [h for h in agent.find_pack(OAKLAND)["hazard_laws"] if h["hazard"] != "water_leak"]}
