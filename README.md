@@ -259,6 +259,20 @@ None of the tests call an API or need keys. Run them from the repo root. Each fo
 
 Health evals (`agents/health/evals.py`) and vision evals with `--live` call Claude and cost money.
 
+## How the sponsor tech is used
+
+**Claude (Sonnet 5.5)** runs all five agents through the Anthropic API with tool use. Every agent gets a strict tool schema (the hazard field is an enum of the 9 tags), writes its result through that tool, and a validator drops any claim that does not cite a source the agent retrieved. Vision reads 12 frames per 60-second segment, segments in parallel, with the system prompt cached. Health and legal get two calls per hazard. Each agent has evals that record and replay API responses, with a dollar budget that aborts before it is passed. Measured: a 5-minute video in 26 s for $0.15; health and legal 9 to 13 s and about 5 cents per hazard. A full case with three confirmed hazards runs under a dollar of API spend and finishes in under three minutes from upload to a sent, cited notice.
+
+**SpacetimeDB (Maincloud, database `home`)** is the one shared state between the agents and the app. The module in `spacetimedb/` has 7 tables and 10 reducers, and the reducers validate: unknown hazard tags, unknown publishers, non-https sources, chunks without a source and malformed JSON are rejected server-side. What writes to it: `data/ingest.py` loads the health corpus (15 CDC, EPA and CDPH sources, 110 chunks); the legal packs register their sources; every run on the deployed site goes through `create_case`, `add_hazard`, `confirm_hazard`, `start_run`, `finish_run` and `fail_run`, so a run that fails is recorded as failed, not lost; the orchestrator watches `agent_run` to launch agents. As of Sunday morning the table holds 73 runs from the weekend, including full five-agent cases written by the live site. The browser reads through the Python API today; the next step is the app subscribing to `agent_run` and `hazard` directly, which is why the state lives in SpacetimeDB and not a plain database.
+
+```
+curl -s -X POST https://maincloud.spacetimedb.com/v1/database/home/sql -H 'Content-Type: text/plain' --data "SELECT case_id, agent, hazard, status FROM agent_run"
+```
+
+**Apify** is how public pages get into the case, through three actors with three jobs. `apify/website-content-crawler` crawled the CDC, EPA and CDPH pages into the health corpus (`data/ingest.py`, about half a cent per run, replayable from the committed crawl). `apify/rag-web-browser` does the property and legal research: owner and manager lookups, and statute pages when `LEGAL_RESEARCH=1`. `apify/playwright-scraper` pulls code-enforcement cases, permits and inspections per address from Accela portals (`agents/property/sources.py`). The clinics lookup uses up to 8 searches to find testing sites near the tenant's ZIP. Every call is capped and cached, so a rerun never spends twice.
+
+**Google** sign-in and Gmail: the tenant sends the notice from their own account and replies are read back into Tracking. Goldilocks never holds the password and never sends without the Send button.
+
 ## What costs money or leaves data behind
 
 - **Calls Claude:**
