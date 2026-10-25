@@ -78,19 +78,26 @@ class SaveSourceTest(unittest.TestCase):
         self.assertTrue(run.sources["R1"]["excerpt_checked"])
         self.assertFalse(run.sources["R1"]["verified"])
 
-    def test_rejects_excerpt_not_on_page(self):
-        with self.assertRaisesRegex(RuntimeError, "not found on that page"):
-            self.run_with_page().handle("save_source", self.args(excerpt="landlords must fix every leak within 10 days"))
+    def assert_rejected(self, run, args, message):
+        with self.assertRaisesRegex(RuntimeError, message):
+            run.handle("save_source", args)
 
-    def test_rejects_unread_url_short_excerpt_and_reused_id(self):
-        run = self.run_with_page()
-        with self.assertRaisesRegex(RuntimeError, "not read"):
-            run.handle("save_source", self.args(url="https://law.example/other"))
-        with self.assertRaisesRegex(RuntimeError, "too short"):
-            run.handle("save_source", self.args(excerpt="waterproofing"))
-        run.handle("save_source", self.args())
-        with self.assertRaisesRegex(RuntimeError, "already used"):
-            run.handle("save_source", self.args())
+    def test_rejects_excerpt_not_on_page(self):
+        run, args = self.run_with_page(), self.args(excerpt="landlords must fix every leak within 10 days")
+        self.assert_rejected(run, args, "not found on that page")
+
+    def test_rejects_unread_url(self):
+        run, args = self.run_with_page(), self.args(url="https://law.example/other")
+        self.assert_rejected(run, args, "not read")
+
+    def test_rejects_short_excerpt(self):
+        run, args = self.run_with_page(), self.args(excerpt="waterproofing")
+        self.assert_rejected(run, args, "too short")
+
+    def test_rejects_reused_id(self):
+        run, args = self.run_with_page(), self.args()
+        run.handle("save_source", args)
+        self.assert_rejected(run, args, "already used")
 
     def test_pdf_excerpts_are_kept_but_marked_unchecked(self):
         run = self.run_with_page(page=None)
@@ -122,8 +129,9 @@ class BudgetTest(unittest.TestCase):
             run.handle("submit_assessment", {"landlord_duty": []})
 
     def test_unknown_tool(self):
+        run = agent.HazardRun(FakeResearch(), {})
         with self.assertRaisesRegex(RuntimeError, "unknown tool"):
-            agent.HazardRun(FakeResearch(), {}).handle("delete_everything", {})
+            run.handle("delete_everything", {})
 
 
 def good_draft(*_args):
@@ -201,6 +209,16 @@ class AssessCaseTest(unittest.TestCase):
         out, calls = self.run_case(save=False)
         self.assertEqual(calls, [])
         self.assertEqual(len(out["assessments"]), 2)
+
+
+class LoadCaseTest(unittest.TestCase):
+    def test_loads_a_case_inside_the_repo(self):
+        self.assertEqual(agent.load_case(str(agent.ROOT / "agents/legal/cases/mold_oakland.json"))["case_id"], CASE["case_id"])
+
+    def test_rejects_paths_outside_the_repo_or_not_json(self):
+        for bad in ["/etc/passwd", str(agent.ROOT / ".." / "outside.json"), str(agent.ROOT / "agents/legal/agent.py"), str(agent.ROOT / "missing.json")]:
+            with self.subTest(path=bad), self.assertRaises(SystemExit):
+                agent.load_case(bad)
 
 
 class EnvTest(unittest.TestCase):

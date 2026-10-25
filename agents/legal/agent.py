@@ -167,7 +167,7 @@ TOOLS = [
     {
         "name": "submit_assessment",
         "description": "Submit the finished assessment. Each claim is {text, source_ids}.",
-        "input_schema": {"type": "object", "properties": {f: CLAIM_SCHEMA for f in CLAIM_FIELDS}, "required": CLAIM_FIELDS},
+        "input_schema": {"type": "object", "properties": dict.fromkeys(CLAIM_FIELDS, CLAIM_SCHEMA), "required": CLAIM_FIELDS},
     },
 ]
 
@@ -420,10 +420,18 @@ def save_run(case, assessment, sources):
     stdb_call("finish_run", [case["case_id"], "legal", assessment["hazard"], json.dumps(assessment)])
 
 
+def load_case(arg):
+    """Read a case file given on the command line. It must be a .json file inside the repo."""
+    path = (Path.cwd() / arg).resolve()
+    if not path.is_relative_to(ROOT) or path.suffix != ".json" or not path.is_file():
+        raise SystemExit(f"case file must be an existing .json file inside {ROOT}: {arg}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args:
         sys.exit(__doc__)
-    case = json.loads(Path(args[0]).read_text(encoding="utf-8"))
+    case = load_case(args[0])
     out = assess_case(case, save="--no-save" not in sys.argv)
     print(json.dumps(out, indent=2))
