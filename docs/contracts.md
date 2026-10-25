@@ -110,7 +110,7 @@ The live core of the app. Every agent writes here, and the UI subscribes so the 
 
 **hazard**: id (u32 autoInc primary key), case_id, hazard (tag from section 1), location (string), confidence (f32), confirmed_by_tenant (bool), evidence_ids_json (string), created_at (timestamp)
 
-**agent_run**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action`), hazard (tag, or "" for case-level agents), status (`pending` | `running` | `done` | `failed`), payload_json (string, that agent's own output shape, "" until done), error (string, "" unless failed), updated_at (timestamp). One row per (case_id, agent, hazard), updated in place.
+**agent_run**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action` | `plan`), hazard (tag, or "" for case-level agents), status (`pending` | `running` | `done` | `failed`), payload_json (string, that agent's own output shape, "" until done), error (string, "" unless failed), updated_at (timestamp). One row per (case_id, agent, hazard), updated in place.
 
 Reducers (the module enforces the rules):
 - `create_case(case_id, address, payload_json)`: upsert

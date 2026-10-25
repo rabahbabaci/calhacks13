@@ -98,7 +98,7 @@ Reducers (all positional JSON arrays, in this order):
 - `start_run(case_id, agent, hazard)`: creates the row or resets it to running (payload and error cleared)
 - `finish_run(case_id, agent, hazard, payload_json)`: running to done
 - `fail_run(case_id, agent, hazard, error)`: running to failed
-- Agents: hazard, health, property, legal, packet, action. Use `""` as hazard for case-level agents.
+- Agents: hazard, health, property, legal, packet, action, plan. Use `""` as hazard for case-level agents.
 - Also live: `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)` (Ansh, section 7), plus the health reducers above.
 
 Start and finish a run. These use `case_example` so a copy-paste never resets a real case:

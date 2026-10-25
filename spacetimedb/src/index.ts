@@ -14,7 +14,7 @@ const HAZARDS = new Set([
 
 const PUBLISHERS = new Set(['CDC', 'CDPH', 'EPA', 'HUD', 'WHO']);
 
-const AGENTS = new Set(['hazard', 'health', 'property', 'legal', 'packet', 'action']);
+const AGENTS = new Set(['hazard', 'health', 'property', 'legal', 'packet', 'action', 'plan']);
 
 function checkHazard(hazard: string) {
   if (!HAZARDS.has(hazard)) throw new SenderError(`unknown hazard: ${hazard}`);
