@@ -107,15 +107,25 @@ def resolve_jurisdiction(case):
     return j
 
 
+def is_draft(pack):
+    return bool(pack) and pack.get("status", "verified") != "verified"
+
+
+def drafts_enabled():
+    """LEGAL_DRAFT_PACKS=1 lets the agent use packs still marked as needing verification (local testing only)."""
+    return os.environ.get("LEGAL_DRAFT_PACKS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def find_pack(jurisdiction):
-    """A city pack for this jurisdiction, else a state-wide pack (city ""), else None."""
+    """A city pack for this jurisdiction, else a state-wide pack (city ""), else None.
+    Draft packs (status other than "verified") are skipped unless LEGAL_DRAFT_PACKS is on."""
     state = (jurisdiction or {}).get("state", "").lower()
     city = (jurisdiction or {}).get("city", "").lower()
     state_pack = None
     for path in sorted(PACKS.glob("*.json")):
         pack = json.loads(path.read_text(encoding="utf-8"))
         j = pack.get("jurisdiction", {})
-        if j.get("state", "").lower() != state:
+        if j.get("state", "").lower() != state or (is_draft(pack) and not drafts_enabled()):
             continue
         if j.get("city", "").lower() == city:
             return pack
@@ -151,8 +161,18 @@ def prior_sources(jurisdiction, taken):
     return out
 
 
+def pack_law(pack, hazard):
+    """The pack's entry for a hazard, following "same_as" (cockroaches -> rodents)."""
+    laws = {h["hazard"]: h for h in (pack or {}).get("hazard_laws", [])}
+    law = laws.get(hazard)
+    if law and law.get("same_as"):
+        target = laws.get(law["same_as"])
+        law = {**target, "hazard": hazard} if target and not target.get("same_as") else None
+    return law
+
+
 def pack_covers(pack, hazard):
-    return bool(pack) and any(h["hazard"] == hazard for h in pack.get("hazard_laws", []))
+    return pack_law(pack, hazard) is not None
 
 
 def pack_sources(pack, hazard):
@@ -161,23 +181,24 @@ def pack_sources(pack, hazard):
     if not pack:
         return sources, None
     j = pack["jurisdiction"]
-    where = f"{j['city']}, {j['state']}"
-    law = next((h for h in pack.get("hazard_laws", []) if h["hazard"] == hazard), None)
+    where = ", ".join(x for x in [j.get("city"), j.get("state")] if x)
+    verified = not is_draft(pack)
+    law = pack_law(pack, hazard)
     if law:
         sources["P0"] = {
-            "cite": f"Verified jurisdiction pack ({pack['pack_id']}): {hazard}",
+            "cite": f"{'Verified' if verified else 'DRAFT, unverified'} jurisdiction pack ({pack['pack_id']}): {hazard}",
             "url": "",
             "kind": "other",
-            "verified": True,
+            "verified": verified,
             "text": " ".join([law.get("landlord_duty", ""), " ".join(law.get("tenant_options", [])), law.get("deadline_note", ""), " ".join(law.get("cautions", []))]),
         }
         for i, c in enumerate(law.get("citations", []), 1):
-            sources[f"P{i}"] = {"cite": c["cite"], "url": c["source_url"], "kind": "statute", "verified": True, "text": c.get("excerpt", "")}
+            sources[f"P{i}"] = {"cite": c["cite"], "url": c["source_url"], "kind": "statute", "verified": verified, "text": c.get("excerpt", "")}
     for i, rule in enumerate(pack.get("general_rules", []), 1):
-        sources[f"G{i}"] = {"cite": rule["cite"], "url": rule["source_url"], "kind": "statute", "verified": True, "text": rule["summary"], "show_as": rule.get("show_as")}
+        sources[f"G{i}"] = {"cite": rule["cite"], "url": rule["source_url"], "kind": "statute", "verified": verified, "text": rule["summary"], "show_as": rule.get("show_as")}
     for i, proc in enumerate(pack.get("city_procedures", []), 1):
         text = " ".join(x for x in [proc.get("how", ""), proc.get("phone", ""), proc.get("email", "")] if x)
-        sources[f"C{i}"] = {"cite": proc["name"], "url": proc["source_url"], "kind": "agency", "verified": True, "text": text, "show_as": proc.get("show_as")}
+        sources[f"C{i}"] = {"cite": proc["name"], "url": proc["source_url"], "kind": "agency", "verified": verified, "text": text, "show_as": proc.get("show_as")}
     for s in sources.values():
         s["jurisdiction"] = where
     return sources, law
@@ -379,7 +400,10 @@ def describe(case, hazard_obj, pack, sources, law, deep=False):
         "",
     ]
     if pack:
-        lines.append(f"Verified jurisdiction pack {pack['pack_id']} (verified {pack.get('verified_on')}):")
+        if is_draft(pack):
+            lines.append(f"DRAFT jurisdiction pack {pack['pack_id']} (not yet verified; local testing only):")
+        else:
+            lines.append(f"Verified jurisdiction pack {pack['pack_id']} (verified {pack.get('verified_on')}):")
         for sid, s in sources.items():
             extra = f" [{s['show_as']}]" if s.get("show_as") else ""
             lines.append(f"- {sid}{extra}: {s['cite']} — {s['text']}")
