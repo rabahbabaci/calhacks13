@@ -39,7 +39,7 @@ def build_pdf(title, filled, still_needed, steps, form_url, form_name):
     for i, step in enumerate(steps, start=1):
         lines.extend(_wrap(f"{i}. {step}"))
     lines.append("")
-    lines.append("You file this yourself. Home does not submit it.")
+    lines.append("You file this yourself. Goldilocks does not submit it.")
 
     ops = ["BT", "/F1 11 Tf", "50 760 Td", "14 TL"]
     for line in lines:

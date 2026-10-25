@@ -1,6 +1,6 @@
 {
   "appId": "org.calhacks.home",
-  "appName": "Home",
+  "appName": "Goldilocks",
   "webDir": "dist",
   "ios": { "contentInset": "automatic" }
 }

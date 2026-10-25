@@ -43,10 +43,10 @@ export function takeGoogleReturn() {
 export function describeGoogleError(error: string) {
   const text = decodeURIComponent((error || "").replace(/\+/g, " "));
   if (!text) return "";
-  if (/access_denied|verification|tested|testers|403/i.test(text)) {
-    return "Google blocked this sign-in because Home is still in testing. In Google Cloud, open APIs & Services → OAuth consent screen → Audience, add the exact Gmail account you are using as a test user, then try Continue with Google again.";
-  }
-  return text;
+  // The details are for whoever runs the Google Cloud project, not for the tenant.
+  console.warn("Google sign-in error:", text, "redirect URI:", googleRedirectUri());
+  if (/access_denied/i.test(text)) return "Google sign-in was cancelled or blocked. You can try again, or sign in with email.";
+  return "Google sign-in is not available right now. Sign in with email instead.";
 }
 
 export function requestGoogleMailToken(): Promise<string> {

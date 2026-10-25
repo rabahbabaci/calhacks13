@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ClinicGroup, type ClinicRow, type Clinics, type HazardDetail, type Home, type Me, type Message, type Preview, type StepGroup, type Tile } from "./api";
-import { clearMailToken, googleRedirectUri, listLandlordMail, mailtoHref, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, takeGoogleReturn } from "./googleSignIn";
+import { clearMailToken, googleRedirectUri, listLandlordMail, mailtoHref, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, storedMailToken, takeGoogleReturn } from "./googleSignIn";
 import { Analyze } from "./Analyze";
+import { Landing } from "./Landing";
 import { Model } from "./Model";
 import { Case } from "./Case";
+import { SeverityBadge, severityOf } from "./severity";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
@@ -18,7 +20,12 @@ function GoogleMark() {
   );
 }
 
-const SEV: Record<string, string> = { low: "var(--low)", moderate: "var(--moderate)", high: "var(--high)", urgent: "var(--urgent)" };
+const STATUS_LABEL: Record<string, string> = { waiting: "Waiting", running: "Loading", done: "Ready", failed: "Failed" };
+
+function StatusTag({ status }: { status?: string }) {
+  const key = status || "waiting";
+  return <span className={"status is-" + key}>{STATUS_LABEL[key] || key}</span>;
+}
 
 function shellLine(home: { shell?: { kind: string; source_url: string; square_feet?: number | null } }) {
   const shell = home.shell;
@@ -116,7 +123,7 @@ function HealthGroup({ title, items }: { title: string; items: string[] }) {
         {shown.map((text) => <li key={text}>{text}</li>)}
       </ul>
       {extra && (
-        <button className="ghost step-open" onClick={() => setOpen(!open)}>
+        <button className="secondary step-open" onClick={() => setOpen(!open)} aria-expanded={open}>
           {open ? "Show less" : `Show ${items.length - limit} more`}
         </button>
       )}
@@ -430,7 +437,7 @@ function ClinicGroup({ group, startOpen }: { group: ClinicGroup; startOpen: bool
             </div>
           )}
           {extra && (
-            <button className="ghost step-open" onClick={() => setMore(!more)}>
+            <button className="secondary step-open" onClick={() => setMore(!more)} aria-expanded={more}>
               {more ? "Show less" : `Show ${rows.length - limit} more`}
             </button>
           )}
@@ -444,7 +451,7 @@ function ClinicsPage({ home, clinics, focusId, onBack }: { home: Home; clinics: 
   const groups = groupedClinics(home, clinics, focusId);
   return (
     <section>
-      <button className="close" onClick={onBack}>Back</button>
+      <button className="close" onClick={onBack}>← Back</button>
       <h2>Nearby testing</h2>
       {clinics.note && <p className="note">{clinics.note}</p>}
       {clinics.warming && groups.length === 0 && (
@@ -582,16 +589,103 @@ function stepPlace(tile: Tile, group?: StepGroup) {
   return [place.room, place.location].filter(Boolean).join(" · ");
 }
 
+function formatSize(bytes: number) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function UploadIcon() {
+  return (
+    <svg className="upload-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 15V4" />
+      <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+/** File picker for the walkthrough: drag and drop or click, then a preview of what was picked. */
+function MediaPicker({ file, onChange }: { file: File | null; onChange: (next: File | null) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [url, setUrl] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [rejected, setRejected] = useState("");
+  useEffect(() => {
+    if (!file) {
+      setUrl("");
+      return;
+    }
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  const take = (list?: FileList | null) => {
+    const picked = list?.[0];
+    if (!picked) return;
+    if (!picked.type.startsWith("video/") && !picked.type.startsWith("image/")) {
+      setRejected(`${picked.name} is not a video or photo.`);
+      return;
+    }
+    setRejected("");
+    onChange(picked);
+  };
+  const choose = () => input.current?.click();
+  const isVideo = Boolean(file?.type.startsWith("video/"));
+  return (
+    <div className="field">
+      <span>Video of the home <span className="optional">(optional)</span></span>
+      <input ref={input} className="sr-only" type="file" accept="video/*,image/*" tabIndex={-1} aria-hidden="true"
+        onChange={(e) => { take(e.target.files); e.target.value = ""; }} />
+      {file && url ? (
+        <div className="media-preview">
+          {isVideo
+            ? <video src={url} controls muted playsInline preload="metadata" aria-label={"Preview of " + file.name} />
+            : <img src={url} alt={"Preview of " + file.name} />}
+          <div className="media-meta">
+            <span className="media-name">
+              <b>{file.name}</b>
+              <small>{isVideo ? "Video" : "Photo"} · {formatSize(file.size)}</small>
+            </span>
+            <span className="media-actions">
+              <button type="button" className="ghost" onClick={choose}>Replace</button>
+              <button type="button" className="ghost" onClick={() => onChange(null)}>Remove</button>
+            </span>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={"dropzone" + (dragging ? " is-over" : "")}
+          onClick={choose}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); take(e.dataTransfer.files); }}
+        >
+          <UploadIcon />
+          <strong>Add a video or photo</strong>
+          <small>Drag it here, or click to choose a file. On a phone you can record one.</small>
+        </button>
+      )}
+      {rejected && <small className="error" role="alert">{rejected}</small>}
+      <small>Walk slowly through each room, and pause on anything that worries you.</small>
+    </div>
+  );
+}
+
 export function App() {
   const [signedIn, setSignedIn] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [live, setLive] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  // Signed-out visitors see the landing page first; Sign in / Get started opens the sign-in card.
+  const [showLogin, setShowLogin] = useState(false);
+  const [booted, setBooted] = useState(false);
   const [home, setHome] = useState<Home | null>(null);
   const [screen, setScreen] = useState<Screen>("case");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [address, setAddress] = useState("123 Example St, Oakland, CA 94612");
+  const [address, setAddress] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<HazardDetail | null>(null);
@@ -615,8 +709,9 @@ export function App() {
     const first = thread.find((item) => item.direction === "out");
     const addresses = current ? landlordEmails(current, to) : [];
     if (!GOOGLE_CLIENT_ID || !addresses.length || !first) return;
+    const token = storedMailToken();
+    if (!token) return;
     try {
-      const token = await requestGoogleMailToken();
       const messages = await listLandlordMail(token, addresses, new Date(mailTime(first)));
       if (!messages.length) return;
       setHome(await api.mail(messages));
@@ -629,16 +724,18 @@ export function App() {
     const next = await api.me();
     setMe(next);
     setLive(Boolean(next.live));
-    if (!next.signed_in) throw new Error("Sign-in did not stick. Try again, or continue as a demo tenant.");
+    if (!next.signed_in) throw new Error("Sign-in did not finish. Try again, or continue as a demo tenant.");
     await refresh();
     setSignedIn(true);
   }
 
   useEffect(() => {
     const returning = takeGoogleReturn();
+    if (returning.token || returning.error) setShowLogin(true);
     api.me().then(async (next) => {
       setMe(next);
       setLive(Boolean(next.live));
+      setBooted(true);
       if (returning.error) {
         setError(returning.error);
         return;
@@ -650,7 +747,11 @@ export function App() {
       if (!next.signed_in) return;
       await refresh();
       setSignedIn(true);
-    }).catch((err) => setError(String(err.message || err)));
+    }).catch((err) => {
+      setBooted(true);
+      setShowLogin(true);
+      setError(String(err.message || err));
+    });
   }, []);
 
   async function startGoogle() {
@@ -713,21 +814,42 @@ export function App() {
 
   async function logout() {
     setError("");
+    // Reset the screen even if the server call or Google's script fails, then reload the
+    // sign-in options so the buttons are there without a refresh.
     await api.logout().catch(() => undefined);
-    window.google?.accounts.id.disableAutoSelect();
+    try {
+      window.google?.accounts?.id?.disableAutoSelect();
+    } catch {
+      // Google's script may not have loaded; nothing to undo then.
+    }
     clearMailToken();
     setSignedIn(false);
-    // Keep the sign-in options on screen: /api/me says which buttons this server offers.
-    setMe(await api.me().catch(() => null));
-    setLive(false);
+    setShowLogin(true);
     setHome(null);
     setOpenId(null);
     setDetail(null);
+    setClinics(null);
+    setPreview(null);
+    setFile(null);
+    setAddress("");
     setScreen("case");
+    try {
+      const next = await api.me();
+      setMe(next);
+      setLive(Boolean(next.live));
+    } catch (err) {
+      setMe(null);
+      setError("Signed out, but the sign-in options could not load. " + String((err as Error).message || err));
+    }
   }
 
-  async function onboard() {
+  async function onboard(event?: { preventDefault: () => void }) {
+    event?.preventDefault();
     if (starting) return;
+    if (!address.trim()) {
+      setError("Enter the address of the home.");
+      return;
+    }
     setError("");
     setStarting(true);
     try {
@@ -745,6 +867,13 @@ export function App() {
     setOpenId(null);
     setDetail(null);
   }
+
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") closeHazard(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detail]);
 
   async function openHazard(id: string) {
     setOpenId(id);
@@ -868,20 +997,24 @@ export function App() {
     const timer = window.setInterval(() => { refresh().catch(() => undefined); }, 10000);
     return () => window.clearInterval(timer);
   }, [showCase]);
-  const colorOf = (id: string) => {
+  const colorOf = (id: string) => severityOf(home?.hazards?.find((h) => h.hazard_id === id)?.severity).color;
+  const labelOf = (id: string) => {
     const hazard = home?.hazards?.find((h) => h.hazard_id === id);
-    return ({ low: "#3d8b6e", moderate: "#a6842c", high: "#d06a2b", urgent: "#b1332a" })[hazard?.severity || "moderate"] || "#a6842c";
+    return `${severityOf(hazard?.severity).mark} ${hazard?.label || "Hazard"}`;
   };
-  const labelOf = (id: string) => home?.hazards?.find((h) => h.hazard_id === id)?.label || "Hazard";
+
+  if (booted && !signedIn && !showLogin && !signingIn && !error) {
+    return <Landing onStart={() => setShowLogin(true)} />;
+  }
 
   return (
     <div className="app">
       <header className="top">
-        <h1>Home</h1>
+        <h1>Goldilocks</h1>
         {signedIn && (
           <div className="top-actions">
             {hasCase && (
-              <nav className="nav-tabs">
+              <nav className="nav-tabs" aria-label="Sections">
                 <button aria-current={screen === "case" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("case"); }}>Case</button>
                 <button aria-current={screen === "model" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("model"); }}>Home</button>
                 <button aria-current={screen === "steps" ? "page" : undefined} onClick={() => { setPreview(null); closeHazard(); setScreen("steps"); }}>Next steps</button>
@@ -895,10 +1028,11 @@ export function App() {
           </div>
         )}
       </header>
-      <main>
+      <main className={signedIn ? undefined : "main-center"}>
         {notice && <p className="note">{notice}</p>}
         {error && (
-          <p className="error">
+          <div className="error-banner" role="alert">
+            <p>
             {error}
             {/Gmail API has not been used|it is disabled/i.test(error) && (
               <>
@@ -907,11 +1041,16 @@ export function App() {
                 , wait a minute, then press Send again.
               </>
             )}
-          </p>
+            </p>
+            <button type="button" className="link" onClick={() => setError("")}>Dismiss</button>
+          </div>
         )}
         {!signedIn && (
-          <section className="card login">
-            <h2>Sign in</h2>
+          <button type="button" className="close login-back" onClick={() => { setError(""); setShowLogin(false); }}>← Home</button>
+        )}
+        {!signedIn && (
+          <section className="card login" aria-labelledby="login-title">
+            <h2 id="login-title">Sign in</h2>
             <p>See what is going on in the place you rent, then decide what to do next.</p>
             <div className="auth-actions">
               {GOOGLE_CLIENT_ID && me?.google && (
@@ -920,50 +1059,53 @@ export function App() {
                     <GoogleMark />
                     Continue with Google
                   </button>
-                  <button className="auth-btn auth-demo" type="button" onClick={startGoogleIdentityOnly} disabled={signingIn}>
-                    Sign in without Gmail
+                  <button className="auth-btn auth-plain" type="button" onClick={startGoogleIdentityOnly} disabled={signingIn}>
+                    Sign in with email
                   </button>
                 </>
               )}
               {me?.dev_login && (
-                <button className="auth-btn auth-demo" type="button" onClick={login} disabled={signingIn}>
+                <button className="auth-btn auth-plain" type="button" onClick={login} disabled={signingIn}>
                   Continue as a demo tenant
                 </button>
               )}
             </div>
-            {signingIn && <p className="note">Signing you in…</p>}
+            {!me && !error && <p className="note" role="status">Loading sign-in options…</p>}
+            {signingIn && <p className="note" role="status">Signing you in…</p>}
             {GOOGLE_CLIENT_ID && me?.google && (
-              <>
-                <p className="note">Continue with Google asks to send and read landlord mail. Because Home is still in Google testing, the account you use must be listed as a test user. Add <code>divitchopra25@gmail.com</code> under APIs &amp; Services → OAuth consent screen → Audience → Test users, then try again.</p>
-                <p className="note">If Google still blocks Gmail, use Sign in without Gmail. You can use the app, but Next steps cannot send until Gmail is granted.</p>
-                <p className="note">If Google says <code>redirect_uri_mismatch</code>, add this exact URI under Authorized redirect URIs (not only JavaScript origins): <code>{googleRedirectUri()}</code></p>
-              </>
+              <p className="login-limit"><span aria-hidden="true">ⓘ</span> Only authorized users can access Sign in with Google for now. Please contact one of the developers.</p>
+            )}
+            {GOOGLE_CLIENT_ID && me?.google && (
+              <ul className="login-notes">
+                <li><b>Continue with Google</b> also lets Goldilocks send your notice from Gmail and read the landlord's replies.</li>
+                <li><b>Sign in with email</b> signs in with your Google account email only. Goldilocks asks for Gmail later, when you send a notice.</li>
+              </ul>
             )}
             {me?.dev_login && (
-              <p className="note">Demo sign-in stays on this computer. No password, and nothing is sent to Google.</p>
+              <p className="note">The demo tenant stays on this computer. No password, and nothing is sent to Google.</p>
             )}
             {me && !me.dev_login && !(GOOGLE_CLIENT_ID && me.google) && (
-              <p className="note">Sign-in is not set up: set GOOGLE_CLIENT_ID on the server and VITE_GOOGLE_CLIENT_ID in web/.env.local, or HOME_DEV_LOGIN=1 for the demo tenant.</p>
+              <p className="note">Sign-in is not set up on this server yet.</p>
             )}
           </section>
         )}
         {signedIn && !home && !error && <p className="note">Opening your home…</p>}
         {signedIn && showAnalyze && home && <Analyze home={home} />}
         {signedIn && home?.needs_onboarding && (
-          <section className="card">
+          <form className="card onboard" onSubmit={onboard}>
             <h2>Your home</h2>
+            <p className="onboard-lede">Tell us where you live and show us around. You check every finding before anything else happens.</p>
             <label className="field">Address
-              <input value={address} onChange={(e) => setAddress(e.target.value)} />
+              <input value={address} onChange={(e) => setAddress(e.target.value)} required autoComplete="street-address"
+                placeholder="Street, city, state and ZIP" />
+              <small>For example: 123 Example St, Oakland, CA 94612</small>
             </label>
-            <label className="field">Video of the home
-              <input type="file" accept="video/*,image/*" capture="environment"
-                onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label>
-            <button className="primary" onClick={onboard} disabled={starting}>{starting ? "Uploading…" : "Start the analysis"}</button>
+            <MediaPicker file={file} onChange={setFile} />
+            <button className="primary" type="submit" disabled={starting}>{starting ? (file ? "Uploading…" : "Starting…") : "Start the analysis"}</button>
             <p className="note">{live
               ? "Each sign-in starts from scratch. We watch the walkthrough, look up the building, and draw the home. You confirm each hazard before health and legal notes load."
               : "The file is stored on this computer. The rooms and icons come from a saved walkthrough, so this step does not call Claude."}</p>
-          </section>
+          </form>
         )}
         {showCase && home && (
           <Case
@@ -975,7 +1117,7 @@ export function App() {
         )}
         {showModel && home && (
           <>
-            <p className="note">{home.address}. Tap a colored icon, or a room below.</p>
+            <p className="note"><b>{home.address}</b>. Select a marker in the model, or a hazard in the list below.</p>
             <p className="note">{shellLine(home)}</p>
             {home.runs?.property === "running" && <p className="note">Looking up the landlord and public records for this address.</p>}
             {home.runs?.health === "running" && <p className="note">Loading cited health notes for the problem you confirmed.</p>}
@@ -983,11 +1125,12 @@ export function App() {
             {home.errors?.hazard && <p className="error">The walkthrough could not be analyzed, so the saved example hazards are shown. {home.errors.hazard}</p>}
             {home.errors?.property && <p className="error">{home.errors.property}</p>}
             <Model rooms={home.layout!.rooms} colorOf={colorOf} labelOf={labelOf} onPick={openHazard} />
+            <h2 className="section-title">Hazards found</h2>
             <div className="rooms">
               {home.hazards!.map((h) => (
                 <button key={h.hazard_id} className="hazard-btn" onClick={() => openHazard(h.hazard_id)}>
                   <span><strong>{h.label}</strong><span>{h.room}</span></span>
-                  <em className="pill" style={{ background: SEV[h.severity] }}>{h.severity}</em>
+                  <SeverityBadge level={h.severity} />
                 </button>
               ))}
             </div>
@@ -1029,8 +1172,10 @@ export function App() {
       </main>
       {detail && (
         <div className="sheet-back" onClick={closeHazard}>
-          <aside className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={detail.hazard.label}>
-            <button className="close" onClick={closeHazard}>Close</button>
+          <aside className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={detail.hazard.label}>
+            <button className="close" onClick={closeHazard} autoFocus>Close</button>
+            <h2>{detail.hazard.label}</h2>
+            <p><SeverityBadge level={detail.hazard.severity} /></p>
             {detail.hazard.urgent_message && <p className="urgent">{detail.hazard.urgent_message}</p>}
             <HazardPhoto photo={detail.hazard.photo} tag={detail.hazard.hazard_id.split("|")[0]} />
             {!detail.hazard.confirmed && (
@@ -1039,21 +1184,19 @@ export function App() {
                 <button className="primary" onClick={confirm}>This is in my home</button>
               </div>
             )}
-            <button className="primary" onClick={() => findTesting(detail.hazard.hazard_id)} disabled={finding}>
+            <button className="secondary" onClick={() => findTesting(detail.hazard.hazard_id)} disabled={finding}>
               {finding ? "Finding nearby tests…" : "Find testing nearby"}
             </button>
-            <h2>{detail.hazard.label}</h2>
-            <p><em className="pill" style={{ background: SEV[detail.hazard.severity] }}>{detail.hazard.severity}</em></p>
             <section className="block">
               <article className="info-tile">
-                <h3>Where <span className="status">{detail.blocks.place.status}</span></h3>
+                <h3>Where <StatusTag status={detail.blocks.place.status} /></h3>
                 <p>{detail.hazard.room}</p>
                 <p>{detail.hazard.location}</p>
                 <p className="cite">Frame {detail.hazard.frame}</p>
               </article>
             </section>
             <section className="block">
-              <h3>Health <span className="status">{detail.blocks.health.status}</span></h3>
+              <h3>Health <StatusTag status={detail.blocks.health.status} /></h3>
               {detail.blocks.health.status === "waiting" && (
                 <p>Confirm this is in your home. The health notes load after that.</p>
               )}
@@ -1077,7 +1220,7 @@ export function App() {
               )}
             </section>
             <section className="block">
-              <h3>This landlord <span className="status">{detail.blocks.landlord.status}</span></h3>
+              <h3>This landlord <StatusTag status={detail.blocks.landlord.status} /></h3>
               {detail.blocks.landlord.status === "running" && <p>Looking up public records for this building.</p>}
               {detail.blocks.landlord.status === "failed" && <p className="error">{detail.blocks.landlord.error || "Public records could not be loaded."}</p>}
               <article className="info-tile landlord-head">
@@ -1094,7 +1237,7 @@ export function App() {
               <RecordTiles records={detail.blocks.landlord.records} />
             </section>
             <section className="block">
-              <h3>The law <span className="status">{detail.blocks.law.status}</span></h3>
+              <h3>The law <StatusTag status={detail.blocks.law.status} /></h3>
               {detail.blocks.law.status === "waiting" && <p>Confirm this is in your home. The citations load after that.</p>}
               {detail.blocks.law.status === "running" && <p>Looking up cited legal notes for this problem.</p>}
               {detail.blocks.law.status === "failed" && (
@@ -1116,11 +1259,6 @@ export function App() {
                 </>
               )}
             </section>
-            {!detail.hazard.confirmed && (
-              <div className="sheet-confirm">
-                <button className="primary" onClick={confirm}>This is in my home</button>
-              </div>
-            )}
           </aside>
         </div>
       )}
@@ -1153,13 +1291,13 @@ function StepsPage({
       <article key={tile.id} className="tile">
         <header>
           <p className="step-kicker">{index}. {stepKind(tile)}</p>
-          <span className={"status" + (tile.status === "done" ? " is-done" : "")}>{tile.status === "done" ? "Done" : "Ready"}</span>
+          <span className={"status" + (tile.status === "done" ? " is-done" : "")}>{tile.status === "done" ? "✓ Done" : "To do"}</span>
         </header>
         <h2>{tile.title}</h2>
         {about ? <p className="note">{about}</p> : null}
         <p>{stepBlurb(tile, started)}</p>
         {tile.changed && <p className="note">{tile.changed}</p>}
-        <button className="ghost step-open" onClick={() => showPreview(tile)}>{stepAction(tile)}</button>
+        <button className="secondary step-open" onClick={() => showPreview(tile)} aria-expanded={preview?.id === tile.id}>{stepAction(tile)}</button>
         {preview?.id === tile.id && (
           <div className="preview">
             <PreviewBody preview={preview.preview} to={to} setTo={setTo} showTo={tile.kind === "email"} />
@@ -1185,10 +1323,10 @@ function StepsPage({
                 <a className="primary" href={preview.preview.form.url} target="_blank" rel="noreferrer">Open listing</a>
               )}
               {tile.id === "phone-legal-aid" && tile.status !== "done" && (
-                <button className="ghost" style={{ color: "#1c211e", borderColor: "var(--line)" }} onClick={async () => { await api.filed(tile.id); setPreview(null); await refresh(); }}>I called this</button>
+                <button className="secondary" onClick={async () => { await api.filed(tile.id); setPreview(null); await refresh(); }}>I called this</button>
               )}
               {tile.kind === "form" && !tile.id.startsWith("record|") && tile.status !== "done" && (
-                <button className="ghost" style={{ color: "#1c211e", borderColor: "var(--line)" }} onClick={async () => { await api.filed(tile.id); setPreview(null); await refresh(); }}>I filed this</button>
+                <button className="secondary" onClick={async () => { await api.filed(tile.id); setPreview(null); await refresh(); }}>I filed this</button>
               )}
             </div>
           </div>
@@ -1205,7 +1343,7 @@ function StepsPage({
           ? (lastIn
             ? "The landlord replied. The next step follows what they wrote."
             : "Your notice was sent. Wait for a written reply. Sent and received mail after that first send is on Tracking.")
-          : "Each card is something you can do. The hazard sheet only lists what the landlord has to do. Home does not send or file until you press the button.")}</p>
+          : "Each card is something you can do. The hazard sheet only lists what the landlord has to do. Goldilocks does not send or file until you press the button.")}</p>
       {suggested && (
         <div className="step-group">
           <h3>Up next</h3>
@@ -1281,7 +1419,8 @@ function RecordTiles({ records }: { records: HazardDetail["blocks"]["landlord"][
             aria-expanded={open}
             onClick={() => setOpenId(open ? "" : id)}
           >
-            {record.date ? <span>{record.date}</span> : <span>{record.status || "Record"}</span>}
+            <span className="record-state">{record.closed ? "✓ Closed" : "● Open"}</span>
+            {record.date ? <span> · {record.date}</span> : record.status ? <span> · {record.status}</span> : null}
             <strong>{record.title}</strong>
             {open && <p>{record.fix || record.status || "No fix recorded."}</p>}
           </button>

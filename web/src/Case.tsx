@@ -1,4 +1,5 @@
 import type { Home, Message, Tile } from "./api";
+import { SeverityBadge } from "./severity";
 
 /* The case at a glance: what to do next, where the case stands, and what was found.
    Everything here comes from /api/home. No agent names: the tenant sees steps, not plumbing. */
@@ -6,8 +7,6 @@ import type { Home, Message, Tile } from "./api";
 type Mark = "done" | "now" | "later";
 
 type Step = { id: string; title: string; detail: string; mark: Mark };
-
-const SEV: Record<string, string> = { low: "var(--low)", moderate: "var(--moderate)", high: "var(--high)", urgent: "var(--urgent)" };
 
 function when(value?: string) {
   if (!value || value === "just now") return "just now";
@@ -167,7 +166,7 @@ export function Case({ home, onHazard, onStep, onScreen }: {
           {(home.hazards || []).map((h) => (
             <button key={h.hazard_id} className="hazard-btn" onClick={() => onHazard(h.hazard_id)}>
               <span><strong>{h.label}</strong><span>{h.room}{h.confirmed ? " · confirmed" : ""}</span></span>
-              <em className="pill" style={{ background: SEV[h.severity] }}>{h.severity}</em>
+              <SeverityBadge level={h.severity} />
             </button>
           ))}
         </div>

@@ -1,6 +1,6 @@
 {
-  "name": "Home",
-  "short_name": "Home",
+  "name": "Goldilocks",
+  "short_name": "Goldilocks",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f3efe6",

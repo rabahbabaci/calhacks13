@@ -357,16 +357,35 @@ def test_live_home_is_analyzing_only_while_the_walkthrough_runs(monkeypatch):
     assert home_payload(item)["analyzing"] is False
 
 
-def test_sign_in_clears_a_previous_case(api):
+def _only_user(state):
+    (user,) = state.users.values()
+    return user
+
+
+def test_sign_out_clears_a_demo_case(api):
     client, state = api
     client.call("POST", "/api/dev/login", b"{}")
     _onboard(client)
-    first = state.users["demo"]["case_id"]
+    first = _only_user(state)["case_id"]
     assert first and first in state.cases
     client.call("POST", "/api/auth/logout", b"{}")
-    client.call("POST", "/api/dev/login", b"{}")
-    assert state.users["demo"]["case_id"] == ""
     assert first not in state.cases
+    assert state.users == {}
+    client.call("POST", "/api/dev/login", b"{}")
+    assert _only_user(state)["case_id"] == ""
+
+
+def test_two_demo_tenants_never_share_a_case(api):
+    client, state = api
+    other = Client(client.base)
+    client.call("POST", "/api/dev/login", b"{}")
+    _onboard(client)
+    other.call("POST", "/api/dev/login", b"{}")
+    _status, home = other.call("GET", "/api/home")
+    assert home["needs_onboarding"] is True
+    assert len(state.users) == 2
+    _status, mine = client.call("GET", "/api/home")
+    assert mine["needs_onboarding"] is False
 
 
 def test_ensure_site_finds_anthropic():
