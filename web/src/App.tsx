@@ -1,6 +1,28 @@
-import { useEffect, useState } from "react";
-import { api, type Clinics, type HazardDetail, type Home, type Preview, type Tile } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { api, type Clinics, type HazardDetail, type Home, type Me, type Preview, type Tile } from "./api";
 import { Model } from "./Model";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+
+/** Google's own "Continue with Google" button. Renders once the gsi/client script has loaded. */
+function GoogleButton({ onCredential }: { onCredential: (credential: string) => void }) {
+  const slot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const gsi = window.google?.accounts.id;
+      if (!gsi || !slot.current) {
+        if (++tries > 100) window.clearInterval(timer);
+        return;
+      }
+      window.clearInterval(timer);
+      gsi.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (res) => onCredential(res.credential) });
+      gsi.renderButton(slot.current, { type: "standard", theme: "outline", size: "large", text: "continue_with", width: 280 });
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [onCredential]);
+  return <div ref={slot} className="google" />;
+}
 
 const SEV: Record<string, string> = { low: "var(--low)", moderate: "var(--moderate)", high: "var(--high)", urgent: "var(--urgent)" };
 
@@ -8,6 +30,7 @@ type Screen = "model" | "steps" | "tracking";
 
 export function App() {
   const [signedIn, setSignedIn] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
   const [home, setHome] = useState<Home | null>(null);
   const [screen, setScreen] = useState<Screen>("model");
   const [error, setError] = useState("");
@@ -27,8 +50,9 @@ export function App() {
   }
 
   useEffect(() => {
-    api.me().then((me) => {
-      if (!me.signed_in) return;
+    api.me().then((next) => {
+      setMe(next);
+      if (!next.signed_in) return;
       setSignedIn(true);
       return refresh();
     }).catch((err) => setError(String(err.message || err)));
@@ -39,6 +63,28 @@ export function App() {
     await api.login();
     setSignedIn(true);
     await refresh();
+  }
+
+  async function loginWithGoogle(credential: string) {
+    setError("");
+    try {
+      await api.google(credential);
+      setSignedIn(true);
+      await refresh();
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    }
+  }
+
+  async function logout() {
+    setError("");
+    await api.logout();
+    window.google?.accounts.id.disableAutoSelect();
+    setSignedIn(false);
+    setHome(null);
+    setOpenId(null);
+    setDetail(null);
+    setScreen("model");
   }
 
   async function onboard() {
@@ -84,11 +130,16 @@ export function App() {
     <div className="app">
       <header className="top">
         <h1>Home</h1>
-        {hasCase && (
+        {signedIn && (
           <nav className="nav">
-            <button aria-current={screen === "model" ? "page" : undefined} onClick={() => setScreen("model")}>Home</button>
-            <button aria-current={screen === "steps" ? "page" : undefined} onClick={() => { setPreview(null); setScreen("steps"); }}>Next steps</button>
-            <button aria-current={screen === "tracking" ? "page" : undefined} onClick={() => setScreen("tracking")}>Tracking</button>
+            {hasCase && (
+              <>
+                <button aria-current={screen === "model" ? "page" : undefined} onClick={() => setScreen("model")}>Home</button>
+                <button aria-current={screen === "steps" ? "page" : undefined} onClick={() => { setPreview(null); setScreen("steps"); }}>Next steps</button>
+                <button aria-current={screen === "tracking" ? "page" : undefined} onClick={() => setScreen("tracking")}>Tracking</button>
+              </>
+            )}
+            <button className="ghost" onClick={logout}>Sign out</button>
           </nav>
         )}
       </header>
@@ -97,8 +148,21 @@ export function App() {
         {!signedIn && (
           <section className="card login">
             <p>See what is going on in the place you rent, then decide what to do next.</p>
-            <button className="primary" onClick={login}>Continue with Google</button>
-            <p className="note">Google sign-in needs a client id, which is not set. This button signs in a demo tenant on this computer. No password, and nothing is sent to Google.</p>
+            {GOOGLE_CLIENT_ID && me?.google && <GoogleButton onCredential={loginWithGoogle} />}
+            {GOOGLE_CLIENT_ID && me?.google && (
+              <p className="note">Google only tells this app who you are. Your case is kept under an anonymous id, never your email.</p>
+            )}
+            {me?.dev_login && (
+              <>
+                <button className={GOOGLE_CLIENT_ID && me.google ? "ghost" : "primary"} style={{ color: "#1c211e", borderColor: "var(--line)" }} onClick={login}>
+                  Continue as a demo tenant
+                </button>
+                <p className="note">Signs in a demo tenant on this computer. No password, and nothing is sent to Google.</p>
+              </>
+            )}
+            {me && !me.dev_login && !(GOOGLE_CLIENT_ID && me.google) && (
+              <p className="note">Sign-in is not set up: set GOOGLE_CLIENT_ID on the server and VITE_GOOGLE_CLIENT_ID in web/.env.local, or HOME_DEV_LOGIN=1 for the demo tenant.</p>
+            )}
           </section>
         )}
         {signedIn && home?.needs_onboarding && (
