@@ -4,6 +4,9 @@ Usage (repo root):
   data/.venv/bin/python agents/health/agent.py agents/health/cases/mold_basic.json            # assess, save, print
   data/.venv/bin/python agents/health/agent.py agents/health/cases/mold_basic.json --no-save
 
+With save (default): creates the case_file row if missing, records one agent_run row per assessed hazard
+(agent "health": start_run, then finish_run with the assessment or fail_run with the error), and keeps save_assessment.
+
 Input: case object per docs/contracts.md section 3 (optional "notes" string).
 Output: {"case_id", "assessments": [section 5 objects], "not_assessed": [{"hazard", "reason"}],
          "dropped": [{"hazard", "field", "text", "reason"}], "usage": [...]}
@@ -185,41 +188,75 @@ def run_llm(client, case, hazard_obj, chunks, sources):
     return draft, usage
 
 
+def _db(reducer, args):
+    try:
+        call_reducer(reducer, args)
+    except urllib.error.URLError as e:
+        raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
+    except StdbError as e:
+        raise RuntimeError(f"{reducer} rejected: {e}") from None
+
+
+def ensure_case(case):
+    cid = case["case_id"].replace("'", "''")
+    try:
+        exists = sql(f"SELECT case_id FROM case_file WHERE case_id = '{cid}'")
+    except urllib.error.URLError as e:
+        raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
+    except StdbError as e:
+        raise RuntimeError(f"case_file lookup failed: {e}") from None
+    if not exists:
+        _db("create_case", [case["case_id"], case.get("address", ""), json.dumps(case)])
+
+
 def assess_case(case, save=True, client=None):
     load_env()
-    result = {"case_id": case["case_id"], "assessments": [], "not_assessed": [], "dropped": [], "usage": []}
+    cid = case["case_id"]
+    result = {"case_id": cid, "assessments": [], "not_assessed": [], "dropped": [], "usage": []}
+    if save:
+        ensure_case(case)
     for h in case.get("hazards", []):
         hazard = h["hazard"]
         t0 = time.time()
-        if is_urgent(hazard):
-            assessment = urgent_assessment(hazard)
-            result["usage"].append({"hazard": hazard, "llm": False, "seconds": round(time.time() - t0, 2)})
-        else:
-            if float(h.get("confidence", 0)) < MIN_CONFIDENCE and not h.get("confirmed_by_tenant"):
-                result["not_assessed"].append({"hazard": hazard, "reason": "low confidence and not confirmed by tenant"})
-                continue
-            chunks, sources = fetch_corpus(hazard)
-            if not chunks:
-                result["not_assessed"].append({"hazard": hazard, "reason": "no source in corpus"})
-                continue
-            if client is None:
-                from anthropic import Anthropic
-                client = Anthropic()
-            draft, usage = run_llm(client, case, h, chunks, sources)
-            assessment, dropped = validate(hazard, draft, chunks, sources)
-            result["dropped"].extend(dropped)
-            usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2)})
-            result["usage"].append(usage)
+        if not is_urgent(hazard) and float(h.get("confidence", 0)) < MIN_CONFIDENCE and not h.get("confirmed_by_tenant"):
+            result["not_assessed"].append({"hazard": hazard, "reason": "low confidence and not confirmed by tenant"})
+            continue
         if save:
-            try:
-                call_reducer("save_assessment", [case["case_id"], hazard, json.dumps(assessment)])
-            except urllib.error.URLError as e:
-                raise DataLayerDown(f"SpacetimeDB unreachable: {e.reason}") from None
-            except StdbError as e:
-                raise RuntimeError(f"save_assessment rejected for {hazard}: {e}") from None
+            _db("start_run", [cid, "health", hazard])
+        try:
+            if is_urgent(hazard):
+                assessment = urgent_assessment(hazard)
+                result["usage"].append({"hazard": hazard, "llm": False, "seconds": round(time.time() - t0, 2)})
+            else:
+                chunks, sources = fetch_corpus(hazard)
+                if not chunks:
+                    reason = "no source in corpus"
+                    result["not_assessed"].append({"hazard": hazard, "reason": reason})
+                    if save:
+                        _db("finish_run", [cid, "health", hazard, json.dumps({"hazard": hazard, "not_assessed": True, "reason": reason})])
+                    continue
+                if client is None:
+                    from anthropic import Anthropic
+                    client = Anthropic()
+                draft, usage = run_llm(client, case, h, chunks, sources)
+                assessment, dropped = validate(hazard, draft, chunks, sources)
+                result["dropped"].extend(dropped)
+                usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2)})
+                result["usage"].append(usage)
+            if save:
+                _db("save_assessment", [cid, hazard, json.dumps(assessment)])
+                _db("finish_run", [cid, "health", hazard, json.dumps(assessment)])
+        except DataLayerDown:
+            raise
+        except Exception as e:
+            if save:
+                try:
+                    _db("fail_run", [cid, "health", hazard, f"{type(e).__name__}: {e}"[:500]])
+                except Exception:
+                    pass
+            raise
         result["assessments"].append(assessment)
     return result
-
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]

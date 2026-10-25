@@ -1,0 +1,12 @@
+{
+  "case_id": "case_demo_001",
+  "address": "123 Example St, Oakland, CA 94612",
+  "jurisdiction": {"state": "CA", "city": "Oakland"},
+  "hazards": [
+    {"hazard": "dampness_mold", "location": "bathroom ceiling", "confidence": 0.82, "confirmed_by_tenant": true, "evidence_ids": ["photo_1"]},
+    {"hazard": "lead_paint", "location": "window frames", "confidence": 0.7, "confirmed_by_tenant": true, "evidence_ids": ["photo_2"]},
+    {"hazard": "exposed_wiring", "location": "kitchen outlet", "confidence": 0.9, "confirmed_by_tenant": true, "evidence_ids": ["photo_3"]}
+  ],
+  "household": {"children": true, "older_adults": false, "pregnancy": false, "breathing_condition": false},
+  "notes": ""
+}
