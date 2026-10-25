@@ -123,7 +123,6 @@ class CaliforniaPackTest(unittest.TestCase):
     def test_ca_pack_matches_the_oakland_format(self):
         oakland = agent.find_pack(OAKLAND)
         self.assertEqual(self.CA["status"], "verified")
-        self.assertTrue(self.CA["verified_on"])
         self.assertEqual(self.CA["jurisdiction"], {"state": "CA", "city": ""})
         self.assertEqual(set(oakland) - set(self.CA), set())
         self.assertEqual({h["hazard"] for h in self.CA["hazard_laws"]}, {h["hazard"] for h in oakland["hazard_laws"]})

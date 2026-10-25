@@ -403,7 +403,8 @@ def describe(case, hazard_obj, pack, sources, law, deep=False):
         if is_draft(pack):
             lines.append(f"DRAFT jurisdiction pack {pack['pack_id']} (not yet verified; local testing only):")
         else:
-            lines.append(f"Verified jurisdiction pack {pack['pack_id']} (verified {pack.get('verified_on')}):")
+            when = f" (verified {pack['verified_on']})" if pack.get("verified_on") else ""
+            lines.append(f"Verified jurisdiction pack {pack['pack_id']}{when}:")
         for sid, s in sources.items():
             extra = f" [{s['show_as']}]" if s.get("show_as") else ""
             lines.append(f"- {sid}{extra}: {s['cite']} — {s['text']}")
