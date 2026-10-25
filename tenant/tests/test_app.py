@@ -1311,7 +1311,8 @@ def test_session_cookie_is_secure_only_behind_https(api):
     _status, headers, _body = _raw(client, "POST", "/api/dev/login", {"X-Forwarded-Proto": "https"})
     assert "; Secure" in headers["Set-Cookie"]
     _status, headers, _body = _raw(client, "POST", "/api/auth/logout", {"X-Forwarded-Proto": "https", "Cookie": headers["Set-Cookie"].split(";", 1)[0]})
-    assert "Max-Age=0" in headers["Set-Cookie"] and "; Secure" in headers["Set-Cookie"]
+    assert "Max-Age=0" in headers["Set-Cookie"]
+    assert "; Secure" in headers["Set-Cookie"]
 
 
 def test_built_web_app_is_served_with_index_fallback(api, tmp_path, monkeypatch):
@@ -1323,14 +1324,20 @@ def test_built_web_app_is_served_with_index_fallback(api, tmp_path, monkeypatch)
     monkeypatch.setattr(server, "DIST", dist)
     client, _state = api
     status, headers, body = _raw(client, "GET", "/")
-    assert status == 200 and b"Goldilocks" in body and headers["Content-Type"].startswith("text/html")
+    assert status == 200
+    assert b"Goldilocks" in body
+    assert headers["Content-Type"].startswith("text/html")
     status, headers, body = _raw(client, "GET", "/assets/app.js")
-    assert status == 200 and b"console" in body and "immutable" in headers["Cache-Control"]
+    assert status == 200
+    assert b"console" in body
+    assert "immutable" in headers["Cache-Control"]
     status, _headers, body = _raw(client, "GET", "/tracking")
-    assert status == 200 and b"Goldilocks" in body
-    status, _headers, _body = _raw(client, "GET", "/../../etc/passwd")
-    assert status == 200 and b"Goldilocks" in _body
-    status, _headers, body = _raw(client, "GET", "/api/nope")
+    assert status == 200
+    assert b"Goldilocks" in body
+    status, _headers, body = _raw(client, "GET", "/../../etc/passwd")
+    assert status == 200
+    assert b"Goldilocks" in body
+    status, _headers, _body = _raw(client, "GET", "/api/nope")
     assert status == 401
 
 
