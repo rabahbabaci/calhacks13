@@ -292,9 +292,27 @@ def _re_subject(subject):
     return f"Re: {text}"
 
 
+_QUOTE_START = re.compile(
+    r"\bOn (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d).{0,160}?\bwrote:",
+    re.S,
+)
+
+
+def own_text(body):
+    """What the landlord wrote, without the quoted letter mail clients append under "On <date> ... wrote:"."""
+    text = str(body or "")
+    match = _QUOTE_START.search(text)
+    own = text[:match.start()].strip() if match else text.strip()
+    return own or text.strip()
+
+
 def classify_reply(message):
-    """Read the landlord's last mail. Do not invent a legal conclusion."""
-    blob = _norm(f"{(message or {}).get('subject') or ''} {(message or {}).get('body') or ''}")
+    """Read the landlord's last mail. Do not invent a legal conclusion.
+
+    Only the landlord's own words count: the quoted notice underneath says "inspect" and
+    "photographs", which must not turn a bare "On it." into a schedule or an info request.
+    """
+    blob = _norm(f"{(message or {}).get('subject') or ''} {own_text((message or {}).get('body'))}")
     if not blob:
         return "unclear"
     if re.search(r"\b(evict|notice to quit|unlawful detainer|retaliat|raise (your |the )?rent|end (your |the )?lease)\b", blob):
