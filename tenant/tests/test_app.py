@@ -1422,3 +1422,17 @@ def test_plan_placements_for_other_hazards_fall_back_to_the_walk_layout(monkeypa
     assert home["shell"]["kind"] == "plan"
     placed = [h["hazard_id"] for room in home["layout"]["rooms"] for h in room["hazards"]]
     assert placed == ["water_leak|under the sink"]
+
+
+def test_reply_is_classified_on_the_landlord_words_only():
+    from tenant.packet import own_text
+
+    quoted = (
+        "On it. On Sun, Oct 25, 2026 at 7:05 AM Rabah Babaci <tenant@example.com> wrote: "
+        "I request that you: 1. Inspect the condition; send photographs; we will come by on Tuesday"
+    )
+    assert own_text(quoted) == "On it."
+    assert classify_reply({"subject": "Re: notice", "body": quoted}) == "unclear"
+    assert classify_reply({"subject": "Re: notice", "body": "We will come by on Tuesday. " + quoted[6:]}) == "schedule"
+    assert own_text("Yes.") == "Yes."
+    assert classify_reply({"subject": "Re: notice", "body": "Yes."}) == "unclear"
