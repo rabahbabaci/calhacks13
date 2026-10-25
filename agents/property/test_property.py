@@ -82,6 +82,12 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual([p["text"] for p in out["patterns"]], ["Illegal dumping and tenant harassment complaints recur."])
         self.assertEqual(dropped[0]["reason"], "accusatory language")
 
+    def test_bare_string_finding_is_dropped_not_crashed(self):
+        draft = {"records": [record()], "patterns": ["none", {"text": "Leak.", "record_ids": ["R1"]}]}
+        out, dropped = validate(draft, RAW)
+        self.assertEqual([p["text"] for p in out["patterns"]], ["Leak."])
+        self.assertEqual(dropped, [{"field": "patterns", "text": "none", "reason": "claim is not an object"}])
+
     def test_accusatory_summary_is_cleared(self):
         out, dropped = validate({"summary": "The owner acted in bad faith."}, RAW)
         self.assertEqual(out["summary"], "")

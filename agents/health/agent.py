@@ -119,6 +119,9 @@ def validate(hazard, draft, chunks, sources):
     for field in CLAIM_FIELDS:
         kept = []
         for claim in draft.get(field) or []:
+            if not isinstance(claim, dict):
+                dropped.append({"hazard": hazard, "field": field, "text": str(claim), "reason": "claim is not an object"})
+                continue
             text = str(claim.get("text", "")).strip()
             ids = sorted({int(i) for i in claim.get("chunk_ids") or [] if str(i).lstrip("-").isdigit()})
             reason = None
