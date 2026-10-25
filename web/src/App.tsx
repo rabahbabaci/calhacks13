@@ -599,6 +599,7 @@ export function App() {
   const [preview, setPreview] = useState<{ id: string; preview: Preview } | null>(null);
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   async function refresh() {
     const next = await api.home();
@@ -710,11 +711,12 @@ export function App() {
 
   async function logout() {
     setError("");
-    await api.logout();
+    await api.logout().catch(() => undefined);
     window.google?.accounts.id.disableAutoSelect();
     clearMailToken();
     setSignedIn(false);
-    setMe(null);
+    // Keep the sign-in options on screen: /api/me says which buttons this server offers.
+    setMe(await api.me().catch(() => null));
     setLive(false);
     setHome(null);
     setOpenId(null);
@@ -723,10 +725,18 @@ export function App() {
   }
 
   async function onboard() {
+    if (starting) return;
     setError("");
-    const next = await api.onboard(address, file);
-    setHome(next);
-    setScreen("model");
+    setStarting(true);
+    try {
+      const next = await api.onboard(address, file);
+      setHome(next);
+      setScreen("model");
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    } finally {
+      setStarting(false);
+    }
   }
 
   function closeHazard() {
@@ -737,7 +747,11 @@ export function App() {
   async function openHazard(id: string) {
     setOpenId(id);
     setScreen("model");
-    setDetail(await api.hazard(id));
+    try {
+      setDetail(await api.hazard(id));
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    }
   }
 
   async function findTesting(id: string) {
@@ -771,8 +785,12 @@ export function App() {
 
   async function confirm() {
     if (!openId) return;
-    setDetail(await api.confirm(openId));
-    await refresh();
+    try {
+      setDetail(await api.confirm(openId));
+      await refresh();
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    }
   }
 
   async function showPreview(tile: Tile) {
@@ -921,7 +939,7 @@ export function App() {
               <input type="file" accept="video/*,image/*" capture="environment"
                 onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
-            <button className="primary" onClick={onboard}>Start the analysis</button>
+            <button className="primary" onClick={onboard} disabled={starting}>{starting ? "Uploading…" : "Start the analysis"}</button>
             <p className="note">{live
               ? "Each sign-in starts from scratch. We watch the walkthrough, look up the building, and draw the home. You confirm each hazard before health and legal notes load."
               : "The file is stored on this computer. The rooms and icons come from a saved walkthrough, so this step does not call Claude."}</p>
@@ -934,6 +952,7 @@ export function App() {
             {home.runs?.property === "running" && <p className="note">Looking up the landlord and public records for this address.</p>}
             {home.runs?.health === "running" && <p className="note">Loading cited health notes for the problem you confirmed.</p>}
             {home.runs?.legal === "running" && <p className="note">Loading cited legal notes for the problem you confirmed.</p>}
+            {home.errors?.hazard && <p className="error">The walkthrough could not be analyzed, so the saved example hazards are shown. {home.errors.hazard}</p>}
             {home.errors?.property && <p className="error">{home.errors.property}</p>}
             <Model rooms={home.layout!.rooms} colorOf={colorOf} labelOf={labelOf} onPick={openHazard} />
             <div className="rooms">
