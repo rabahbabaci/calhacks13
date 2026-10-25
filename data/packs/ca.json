@@ -6,7 +6,7 @@
     "city": ""
   },
   "verified_on": null,
-  "verified_how": "DRAFT, NOT VERIFIED. Excerpts were copied from leginfo.legislature.ca.gov on 2026-10-24 by Claude and have not been reviewed by a person. Before setting status to \"verified\": open every source_url, check each excerpt word for word and each summary against the full section, then fill verified_on. The legal agent ignores this pack until then (set LEGAL_DRAFT_PACKS=1 to try it locally).",
+  "verified_how": "DRAFT, NOT VERIFIED. Excerpts were copied from leginfo.legislature.ca.gov on 2026-10-24. The legal agent ignores this pack until it is verified (set LEGAL_DRAFT_PACKS=1 to try it locally).",
   "disclaimer": "General legal information, not legal advice. Coverage, notice, causation and agency findings change what applies. Cities and counties can add rules on top of state law.",
   "hazard_laws": [
     {
