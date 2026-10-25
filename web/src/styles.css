@@ -148,10 +148,28 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 
 /* Home model and hazard list */
 .model { position: relative; height: 46dvh; min-height: 260px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); touch-action: none; }
-.marker-label {
-  pointer-events: auto; cursor: pointer; border: 1px solid var(--ink); background: var(--surface); color: var(--ink);
-  border-radius: 6px; padding: 4px 8px; font: 600 12px/1.3 "Avenir Next", "Segoe UI", sans-serif;
-  width: max-content; max-width: 160px; white-space: pre-line; text-align: center;
+.marker-pin {
+  position: relative; pointer-events: auto; cursor: pointer; transform: translateY(-50%);
+  display: inline-flex; align-items: center; padding: 0; border: 0; background: none;
+}
+.marker-pin b {
+  display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 8px; border-radius: 17px;
+  background: var(--pin, var(--ink)); color: #fff; border: 2px solid #fff;
+  font: 700 13px/1 "Avenir Next", "Segoe UI", sans-serif; white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.marker-pin span {
+  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  width: max-content; max-width: 200px; padding: 5px 8px; border-radius: 6px;
+  background: var(--ink); color: #fff; font: 600 12px/1.3 "Avenir Next", "Segoe UI", sans-serif; text-align: center;
+  opacity: 0; visibility: hidden; transition: opacity 120ms ease;
+}
+.marker-pin:hover span, .marker-pin:focus-visible span { opacity: 1; visibility: visible; }
+.marker-pin:focus-visible { outline: none; }
+.marker-pin:focus-visible b { outline: 3px solid var(--ink); outline-offset: 2px; }
+.hazard-num {
+  display: inline-grid; place-items: center; min-width: 26px; height: 26px; margin-right: 10px; padding: 0 6px;
+  border-radius: 13px; background: var(--sunk); font-size: 13px; font-weight: 700; flex: none;
 }
 .rooms { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .hazard-btn {
@@ -160,7 +178,8 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 }
 .hazard-btn:hover { border-color: var(--ink); }
 .hazard-btn strong { display: block; font-size: 16px; }
-.hazard-btn > span:not(.badge) > span { color: var(--muted); font-size: 14px; }
+.hazard-btn .hazard-room { display: block; color: var(--muted); font-size: 14px; }
+.hazard-main { display: flex; align-items: center; min-width: 0; }
 
 /* Hazard sheet */
 .sheet-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: flex; justify-content: flex-end; z-index: 5; }
@@ -270,7 +289,20 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 .analyze h2 { margin: 4px 0 4px; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 28px; }
 .analyze-now { margin: 0 0 12px; font-size: 17px; }
 .analyze-bar { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; border: 1px solid var(--line); }
-.analyze-bar b { display: block; height: 100%; background: var(--accent); transition: width 300ms ease; }
+.analyze-bar { position: relative; }
+.analyze-bar b { position: relative; display: block; height: 100%; background: var(--accent); transition: width 600ms ease; overflow: hidden; }
+/* While a step runs, a light band sweeps across the filled part so the bar is visibly working. */
+.analyze-bar.is-moving b::after {
+  content: ""; position: absolute; inset: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: bar-sweep 1.4s ease-in-out infinite;
+}
+@keyframes bar-sweep { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.dots { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: dot-bounce 1s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.55; } 30% { transform: translateY(-6px); opacity: 1; } }
 .analyze-stages { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .analyze-stages li {
   display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: start;
@@ -447,23 +479,78 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
   .lp-brand span { font-size: 21px; }
 }
 
-/* Case screen: next action, timeline, home summary. Uses the card and hazard-btn styles above. */
-.case { display: flex; flex-direction: column; gap: 14px; }
-.case-next h2 { margin: 4px 0 6px; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 26px; }
-.case-next > p { margin: 0 0 12px; font-size: 15px; line-height: 1.45; }
-.case-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.case-head h2 { margin: 0; }
-.case-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.case-steps li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; align-items: start; padding: 8px 6px; border-radius: 12px; }
-.case-steps li.is-now { background: rgba(166, 132, 44, 0.1); box-shadow: inset 0 0 0 1px rgba(166, 132, 44, 0.3); }
-.case-steps li.is-later { opacity: 0.6; }
-.case-mark { width: 14px; height: 14px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
-.case-steps .is-done .case-mark { border-color: var(--low); background: var(--low); }
-.case-steps .is-now .case-mark { border-color: var(--moderate); background: var(--moderate); box-shadow: 0 0 0 5px rgba(166, 132, 44, 0.18); }
-.case-steps strong { display: block; font-size: 15px; }
-.case-steps small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: #5c564c; }
-.case-landlord { margin-top: 10px; }
-@media (min-width: 760px) {
-  .case { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
-  .case-next { grid-column: 1 / -1; }
+/* Home dashboard: next action, stats, progress timeline, problems and landlord. */
+.dash { display: flex; flex-direction: column; gap: 16px; max-width: 1040px; margin: 0 auto; }
+.dash-head h2 { margin: 2px 0 0; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: clamp(24px, 3vw, 32px); }
+.dash h3 { margin: 0; font-size: 17px; }
+.dash-next {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  padding: 22px 24px; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid #c9a24a; border-radius: 14px;
+}
+.dash-next h3 { margin: 4px 0 4px; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 24px; }
+.dash-next p { margin: 0; color: var(--muted); max-width: 56ch; }
+.dash-next .primary { width: auto; min-width: 200px; }
+.dash-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dash-stats li { padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.dash-stats b { display: block; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 28px; line-height: 1.1; }
+.dash-stats span { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; }
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.dash-side { display: flex; flex-direction: column; gap: 16px; }
+.dash-card { padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.dash-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.dash-card-head .ghost { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+.dash-steps { list-style: none; margin: 0; padding: 0; }
+.dash-steps li { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding-bottom: 18px; }
+.dash-steps li:last-child { padding-bottom: 0; }
+.dash-steps li:not(:last-child)::before {
+  content: ""; position: absolute; left: 15px; top: 34px; bottom: 2px; width: 2px; background: var(--line);
+}
+.dash-steps li.is-done:not(:last-child)::before { background: var(--ink); }
+.dash-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  border: 2px solid var(--line); background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 700;
+}
+.is-done .dash-mark { background: var(--ink); border-color: var(--ink); color: #fff; }
+.is-now .dash-mark { border-color: var(--ink); color: var(--ink); box-shadow: 0 0 0 5px rgba(201, 162, 74, 0.22); }
+.dash-steps strong { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 16px; margin-top: 5px; }
+.dash-steps small { display: block; margin-top: 2px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.dash-state { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.is-now .dash-state { color: var(--sun-ink, #7a5a14); }
+.is-done .dash-state { color: var(--ok); }
+.dash-landlord .landlord-head span:last-child { display: flex; flex-direction: column; }
+.dash-landlord small { color: var(--muted); font-size: 14px; }
+@media (max-width: 760px) {
+  .dash-stats { grid-template-columns: repeat(2, 1fr); }
+  .dash-grid { grid-template-columns: 1fr; }
+  .dash-next .primary { width: 100%; }
+}
+
+/* Next-step pop-up after confirming a hazard. Sits above the hazard sheet so it is seen on phones too. */
+.nudge {
+  position: fixed; z-index: 20; left: 50%; bottom: 20px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; width: min(560px, calc(100% - 24px));
+  padding: 12px 12px 12px 16px; border-radius: 12px; background: var(--ink); color: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22); animation: nudge-in 220ms ease-out;
+}
+.nudge p { margin: 0; flex: 1; font-size: 15px; line-height: 1.4; }
+.nudge-check {
+  display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 50%;
+  background: #c9a24a; color: var(--ink); font-weight: 700;
+}
+.nudge-go {
+  flex: none; min-height: 44px; padding: 10px 14px; border-radius: 8px; border: 0;
+  background: #fff; color: var(--ink); font-weight: 600; white-space: nowrap;
+}
+.nudge-go:hover { background: #ecece7; }
+.nudge-close { flex: none; width: 44px; height: 44px; border: 0; background: none; color: #fff; font-size: 22px; line-height: 1; }
+.nudge :focus-visible { outline-color: #fff; }
+@keyframes nudge-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (min-width: 800px) {
+  /* Keep it clear of the hazard sheet on the right. */
+  .nudge { left: calc(50% - 220px); }
+}
+@media (max-width: 480px) {
+  .nudge { flex-wrap: wrap; bottom: 12px; }
+  .nudge p { flex-basis: calc(100% - 80px); }
+  .nudge-go { flex: 1; }
 }

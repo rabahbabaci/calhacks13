@@ -78,8 +78,9 @@ export function Analyze({ home }: { home: Home }) {
       </div>
       <h2>{home.address || "Your address"}</h2>
       <p className="analyze-now" aria-live="polite">{active ? active.doing : "The walkthrough is ready."}</p>
-      <div className="analyze-bar" role="progressbar" aria-label="Steps finished" aria-valuemin={0} aria-valuemax={stages.length} aria-valuenow={finished}>
-        <b style={{ width: `${Math.max(4, (finished / stages.length) * 100)}%` }} />
+      <div className={"analyze-bar" + (running.length ? " is-moving" : "")} role="progressbar" aria-label="Steps finished" aria-valuemin={0} aria-valuemax={stages.length} aria-valuenow={finished}>
+        {/* Finished steps count fully, running ones half, so the bar grows as work starts, not only when it ends. */}
+        <b style={{ width: `${Math.max(6, ((finished + running.length * 0.5) / stages.length) * 100)}%` }} />
       </div>
       <p className="note">
         {finished} of {stages.length} steps finished
@@ -88,7 +89,11 @@ export function Analyze({ home }: { home: Home }) {
       <ol className="analyze-stages">
         {stages.map((stage) => (
           <li key={stage.id} className={`is-${stage.status}`}>
-            <span className="analyze-mark" aria-hidden="true">{MARK[stage.status] || "○"}</span>
+            <span className="analyze-mark" aria-hidden="true">
+              {stage.status === "running"
+                ? <span className="dots"><i /><i /><i /></span>
+                : MARK[stage.status] || "○"}
+            </span>
             <div>
               <strong>{stage.title} <span className="sr-only">— {WORD[stage.status] || stage.status}</span></strong>
               <small>

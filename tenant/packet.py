@@ -738,7 +738,7 @@ def build_tiles(case, today=None):
                     "filled": [{"label": "Record", "value": f"{record.get('ref') or rid} {record.get('title') or ''}"}],
                     "still_needed": [],
                     "form": None,
-                    "steps": ["Confirm a problem on Home. This record is included when you file the city complaint."],
+                    "steps": ["Confirm a problem on Case. This record is included when you file the city complaint."],
                     "note": "This is the city's record. It is not a second form to file.",
                 },
             })

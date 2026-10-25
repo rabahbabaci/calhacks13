@@ -106,7 +106,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
             </ul>
           </div>
           <div className="lp-shot-media">
-            <Photo src="/images/case-screen.png" alt="The Goldilocks case screen: next action, a five-step timeline, and the hazards found" ratio="1696 / 1368" className="lp-shot-case" />
+            <Photo src="/images/case-screen.png" alt="The Goldilocks home dashboard: next action, a five-step timeline, and the hazards found" ratio="1696 / 1368" className="lp-shot-case" />
             <Photo src="/images/model-screen.png" alt="A 3D model of an apartment with three hazards marked in their rooms" ratio="1692 / 696" className="lp-shot-model" />
           </div>
         </section>

@@ -530,7 +530,7 @@ function stepBlurb(tile: Tile, started: boolean) {
   if (tile.kind === "email") return "Send written notice of this condition. Nothing is sent until you press Send.";
   if (tile.id === "phone-legal-aid") return "Call the listed legal aid number. This only dials. Confirm eligibility at intake. Filing comes after this call, if you decide to file.";
   if (tile.kind === "phone") return "Call for this urgent problem. This only dials.";
-  if (tile.id.startsWith("record|")) return "The city already has this record. Confirm a problem on Home and it is included in the complaint step. This is not a second form.";
+  if (tile.id.startsWith("record|")) return "The city already has this record. Confirm a problem on Case and it is included in the complaint step. This is not a second form.";
   if (tile.id === "form-complaint") return "File under the cited statute or city complaint after you have called legal aid and decided to file.";
   return "File one city complaint. Include any open city record listed in the draft. Opening the form does not file it.";
 }
@@ -683,9 +683,11 @@ export function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [booted, setBooted] = useState(false);
   const [home, setHome] = useState<Home | null>(null);
-  const [screen, setScreen] = useState<Screen>("case");
+  const [screen, setScreen] = useState<Screen>("model");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // After "This is in my home": a pop-up pointing at the next step. null = hidden.
+  const [nudge, setNudge] = useState<{ tileId: string } | null>(null);
   const [address, setAddress] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -826,6 +828,7 @@ export function App() {
     clearMailToken();
     setSignedIn(false);
     setShowLogin(true);
+    setNudge(null);
     setHome(null);
     setOpenId(null);
     setDetail(null);
@@ -833,7 +836,7 @@ export function App() {
     setPreview(null);
     setFile(null);
     setAddress("");
-    setScreen("case");
+    setScreen("model");
     try {
       const next = await api.me();
       setMe(next);
@@ -856,7 +859,7 @@ export function App() {
     try {
       const next = await api.onboard(address, file);
       setHome(next);
-      setScreen("case");
+      setScreen("model");
     } catch (err) {
       setError(String((err as Error).message || err));
     } finally {
@@ -919,10 +922,20 @@ export function App() {
     if (!openId) return;
     try {
       setDetail(await api.confirm(openId));
-      await refresh();
+      const next = await refresh();
+      setNudge({ tileId: next?.next?.tile_id || "" });
     } catch (err) {
       setError(String((err as Error).message || err));
     }
+  }
+
+  function goToNextStep() {
+    const id = nudge?.tileId || home?.next?.tile_id || "";
+    const tile = (home?.tiles || []).find((t) => t.id === id);
+    setNudge(null);
+    closeHazard();
+    setScreen("steps");
+    if (tile) showPreview(tile);
   }
 
   async function showPreview(tile: Tile) {
@@ -999,9 +1012,11 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [showCase]);
   const colorOf = (id: string) => severityOf(home?.hazards?.find((h) => h.hazard_id === id)?.severity).color;
-  const labelOf = (id: string) => {
-    const hazard = home?.hazards?.find((h) => h.hazard_id === id);
-    return `${severityOf(hazard?.severity).mark} ${hazard?.label || "Hazard"}`;
+  const labelOf = (id: string) => home?.hazards?.find((h) => h.hazard_id === id)?.label || "Hazard";
+  // Pin text: severity shape plus the hazard's number in the list, so the model and the list match.
+  const pinOf = (id: string) => {
+    const index = (home?.hazards || []).findIndex((h) => h.hazard_id === id);
+    return `${severityOf(home?.hazards?.[index]?.severity).mark} ${index + 1}`;
   };
 
   if (booted && !signedIn && !showLogin && !signingIn && !error) {
@@ -1016,8 +1031,8 @@ export function App() {
           <div className="top-actions">
             {hasCase && (
               <nav className="nav-tabs" aria-label="Sections">
-                <button aria-current={screen === "case" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("case"); }}>Case</button>
-                <button aria-current={screen === "model" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("model"); }}>Home</button>
+                <button aria-current={screen === "case" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("case"); }}>Home</button>
+                <button aria-current={screen === "model" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("model"); }}>Case</button>
                 <button aria-current={screen === "steps" ? "page" : undefined} onClick={() => { setPreview(null); closeHazard(); setScreen("steps"); }}>Next steps</button>
                 <button aria-current={screen === "tracking" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("tracking"); }}>Tracking</button>
                 {clinics && (
@@ -1125,12 +1140,15 @@ export function App() {
             {home.runs?.legal === "running" && <p className="note">Loading cited legal notes for the problem you confirmed.</p>}
             {home.errors?.hazard && <p className="error">The walkthrough could not be analyzed, so the saved example hazards are shown. {home.errors.hazard}</p>}
             {home.errors?.property && <p className="error">{home.errors.property}</p>}
-            <Model rooms={home.layout!.rooms} colorOf={colorOf} labelOf={labelOf} onPick={openHazard} />
+            <Model rooms={home.layout!.rooms} colorOf={colorOf} labelOf={labelOf} pinOf={pinOf} onPick={openHazard} />
             <h2 className="section-title">Hazards found</h2>
             <div className="rooms">
-              {home.hazards!.map((h) => (
+              {home.hazards!.map((h, i) => (
                 <button key={h.hazard_id} className="hazard-btn" onClick={() => openHazard(h.hazard_id)}>
-                  <span><strong>{h.label}</strong><span>{h.room}</span></span>
+                  <span className="hazard-main">
+                    <b className="hazard-num" aria-label={`Marker ${i + 1}`}>{i + 1}</b>
+                    <span><strong>{h.label}</strong><span className="hazard-room">{h.room}{h.confirmed ? " · confirmed" : ""}</span></span>
+                  </span>
                   <SeverityBadge level={h.severity} />
                 </button>
               ))}
@@ -1171,6 +1189,22 @@ export function App() {
           </section>
         )}
       </main>
+      {nudge && signedIn && screen !== "steps" && (() => {
+        // In live mode the next step may appear a little after the confirm, once legal finishes.
+        const id = nudge.tileId || home?.next?.tile_id || "";
+        const tile = (home?.tiles || []).find((t) => t.id === id);
+        return (
+          <div className="nudge" role="status" aria-live="polite">
+            <span className="nudge-check" aria-hidden="true">✓</span>
+            <p>
+              <b>Confirmed.</b>{" "}
+              {tile ? <>Next step: {tile.title}.</> : home?.runs?.legal === "running" ? "Your next steps are loading." : "Your next steps are ready."}
+            </p>
+            <button type="button" className="nudge-go" onClick={goToNextStep}>{tile ? "Go to next step" : "See next steps"} →</button>
+            <button type="button" className="nudge-close" aria-label="Dismiss" onClick={() => setNudge(null)}>×</button>
+          </div>
+        );
+      })()}
       {detail && (
         <div className="sheet-back" onClick={closeHazard}>
           <aside className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={detail.hazard.label}>
@@ -1352,10 +1386,10 @@ function StepsPage({
         </div>
       )}
       {groups.length === 0 && shared.length === 0 && !suggested && (
-        <p className="note">Confirm a problem on Home first. After you tap “This is in my home”, the steps for that problem show up here.</p>
+        <p className="note">Confirm a problem on Case first. After you tap “This is in my home”, the steps for that problem show up here.</p>
       )}
       {groups.length === 0 && shared.length > 0 && !shared.some((tile) => tile.kind === "email") && !suggested && (
-        <p className="note">The city already has an open record. Confirm a problem on Home to add the landlord email, the fix options, and one complaint form that includes that record.</p>
+        <p className="note">The city already has an open record. Confirm a problem on Case to add the landlord email, the fix options, and one complaint form that includes that record.</p>
       )}
       {groups.filter(({ actions }) => actions.length > 0 || home.runs?.legal === "running").map(({ group, actions }) => (
         <div className="step-group" key={group.tag}>
