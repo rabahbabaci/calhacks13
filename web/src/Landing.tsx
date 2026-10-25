@@ -1,23 +1,5 @@
-// Landing page for signed-out visitors: one hero. <Placeholder> marks a slot for a real logo.
+// Landing page for signed-out visitors: one hero.
 import { useEffect, useRef, useState } from "react";
-
-function Placeholder({ label, ratio = "16 / 9", round = false, className = "" }: {
-  label: string;
-  ratio?: string;
-  round?: boolean;
-  className?: string;
-}) {
-  return (
-    <div
-      className={"ph" + (round ? " ph-round" : "") + (className ? " " + className : "")}
-      style={{ aspectRatio: ratio }}
-      role="img"
-      aria-label={label + " (placeholder)"}
-    >
-      <span>{label}</span>
-    </div>
-  );
-}
 
 /** A real picture in a slot: cropped to the slot, fading in once it is loaded and on screen. */
 function Photo({ src, alt, ratio = "4 / 3", focus = "center", className = "" }: {
@@ -57,7 +39,7 @@ export function Landing({ onStart }: { onStart: () => void }) {
     <div className="landing">
       <header className="lp-nav">
         <span className="lp-brand">
-          <Placeholder label="Logo" ratio="1 / 1" round className="lp-logo" />
+          <img className="lp-logo" src="/logo.svg" alt="" width={36} height={36} />
           <span>Goldilocks</span>
         </span>
         <button type="button" className="lp-btn lp-btn-small" onClick={onStart}>Sign in</button>
