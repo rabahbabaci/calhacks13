@@ -17,9 +17,9 @@ How it works:
   the thread keeps going in the background and its late finish_run is rejected by the module.
 - One orchestrator process only. SpacetimeDB is the only channel to the UI.
 
-Adding an agent: one line in AGENTS mapping the agent name (contracts section 6)
-to a function that takes a one-hazard case object and runs it with save=True.
-Case-level agents (hazard "") are not launched yet.
+Adding an agent: one line in AGENTS (per confirmed hazard) or CASE_AGENTS (once per
+case, hazard ""). Property is case-level: it launches when the case has an address
+and has no property run. Health and legal still wait for confirm_hazard.
 
 Env: STDB_URL etc. from .env (see docs/stack-findings.md). The legal agent wants
 ANTHROPIC_API_KEY_Legal and APIFY_TOKEN_Legal; when unset they fall back to
@@ -91,11 +91,45 @@ def run_legal(case):
     return _load("legal", ROOT / "agents" / "legal" / "agent.py").assess_case(case, save=True)
 
 
-# agent name (contracts section 6) -> entry function(one-hazard case)
+def run_property(case):
+    return _load("property", ROOT / "agents" / "property" / "agent.py").assess(case, save=True)
+
+
+# Per confirmed hazard. Property is not here: it reads the address, not one hazard.
 AGENTS = {
     "health": run_health,
     "legal": run_legal,
 }
+
+CASE_AGENTS = {
+    "property": run_property,
+}
+
+
+def split_agents(spec):
+    names = [a.strip() for a in spec.split(",") if a.strip()]
+    unknown = [a for a in names if a not in AGENTS and a not in CASE_AGENTS]
+    if unknown:
+        raise SystemExit(f"unknown agent: {unknown[0]}")
+    return (
+        {a: AGENTS[a] for a in names if a in AGENTS},
+        {a: CASE_AGENTS[a] for a in names if a in CASE_AGENTS},
+    )
+
+
+def case_level_keys(case_rows, runs, enabled, now):
+    """Cases with an address and no finished case-level run. enabled is the agent names to consider."""
+    keys = []
+    for row in case_rows:
+        if not str(row.get("address") or "").strip():
+            continue
+        for agent in enabled:
+            if agent not in CASE_AGENTS:
+                continue
+            key = (row["case_id"], agent, "")
+            if should_launch(runs.get(key), now):
+                keys.append(key)
+    return keys
 
 
 # ---------- db helpers ----------
@@ -119,6 +153,11 @@ def fetch_state(case_id=None):
     hazards = sql(f"SELECT * FROM hazard WHERE confirmed_by_tenant = true{where}")
     runs = sql(f"SELECT case_id, agent, hazard, status, updated_at FROM agent_run WHERE agent <> ''{where}")
     return hazards, {(r["case_id"], r["agent"], r["hazard"]): r for r in runs}
+
+
+def fetch_cases(case_id=None):
+    where = f" WHERE case_id = '{q(case_id)}'" if case_id else ""
+    return sql(f"SELECT case_id, address FROM case_file{where}")
 
 
 _case_cache = {}
@@ -211,14 +250,15 @@ def main():
     ap.add_argument("--once", action="store_true", help="exit when nothing is running or launchable")
     ap.add_argument("--workers", type=int, default=WORKERS)
     ap.add_argument("--timeout", type=float, default=RUN_TIMEOUT_S)
-    ap.add_argument("--agents", default=",".join(AGENTS), help="comma-separated subset of agents")
+    ap.add_argument("--agents", default="health,legal,property", help="comma-separated subset of agents")
     ap.add_argument("--wait", type=float, default=120, help="--once: seconds to wait for the first confirm before exiting")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # Anthropic SDK request lines
-    agents = {a: AGENTS[a] for a in args.agents.split(",") if a}
-    log.info("db=%s agents=%s workers=%d timeout=%ss case=%s", BASE_URL, list(agents), args.workers, args.timeout, args.case_id or "all")
+    agents, case_agents = split_agents(args.agents)
+    log.info("db=%s agents=%s case_agents=%s workers=%d timeout=%ss case=%s",
+             BASE_URL, list(agents), list(case_agents), args.workers, args.timeout, args.case_id or "all")
 
     pool = ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix="agent")
     inflight = {}  # key -> Run
@@ -230,6 +270,7 @@ def main():
         now = time.time()
         try:
             hazards, runs = fetch_state(args.case_id)
+            cases = fetch_cases(args.case_id) if case_agents else []
         except Exception as e:
             log.error("poll failed: %s", e)
             time.sleep(POLL_S)
@@ -254,6 +295,20 @@ def main():
                     t_start = time.time()
                 log.info("launch %s/%s/%s (%s)", *key, reason)
                 inflight[key] = Run(key, pool.submit(worker, key, fn, case), time.time())
+
+        for key in case_level_keys(cases, runs, list(case_agents), now):
+            if key in inflight:
+                continue
+            try:
+                case = case_payload(key[0])
+                call_reducer("start_run", list(key))
+            except Exception as e:
+                log.error("launch %s/%s/%s skipped: %s", *key, e)
+                continue
+            if t_start is None:
+                t_start = time.time()
+            log.info("launch %s/%s/%s (case)", *key)
+            inflight[key] = Run(key, pool.submit(worker, key, case_agents[key[1]], case), time.time())
 
         # reap
         for key, run in list(inflight.items()):

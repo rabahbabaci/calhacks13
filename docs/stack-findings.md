@@ -413,3 +413,24 @@ The two candidates that keep coming up are `rust_corrosion` (3 times) and `struc
 - Decide on `rust_corrosion` and `structural_damage` (see the table above) before adding any tag. Adding one touches contracts.md section 1, the module's HAZARDS set and the pack.
 - Optional local face filter to save about 2 frames per vlog segment.
 - UI: show `label`, `location`, the cited frames and the bbox; let the tenant confirm each hazard before it goes to the health agent.
+
+## App (Divit)
+
+The tenant site is `web/` (Vite + React, mobile first, installable from `manifest.webmanifest`). The same build is the iPhone app: `web/capacitor.config.json` is ready for `npx cap add ios` from `web/` after `npm run build`. The API is `tenant/server.py`. The browser talks only to that API.
+
+Run both, from the repo root:
+
+```
+data/.venv/bin/python -m tenant.server
+cd web && npm install && npm run dev
+```
+
+Open http://127.0.0.1:5173. The API is http://127.0.0.1:8787, and Vite proxies `/api`.
+
+**Fixture mode, which is the default.** Sign-in says Continue with Google. No Google client id is configured, so the button starts a local demo session and does not call Google. Enter an address and, if you want, a video. The file is saved under `tenant/out/media/` (gitignored). Rooms and hazards come from `tenant/fixture.py`, a saved three-hazard walkthrough, so this path does not call Claude, Gmail, Apify, or the Census geocoder. Health and legal blocks stay waiting until "This is in my home". The property block is already filled from the fixture. Preview does not send. Send uses an in-memory mailer. Download returns a one-page PDF with the draft, the Oakland complaint URL, and the pack's filing steps.
+
+**Still needs a Google OAuth client** before real sign-in or Gmail send. Set a client id, then the login button should use Google Identity Services and ask for `gmail.send` only on Send. Until then leave `HOME_DEV_LOGIN=1` (the default). Set `HOME_DEV_LOGIN=0` to hide the demo session.
+
+**Orchestrator.** `integration/orchestrator.py` now launches the property agent once per case that has an address and no property run. Health and legal are unchanged: they still run only for confirmed hazards. Starting the orchestrator for real will call the property agent, which spends Claude and Apify. It was not started for this work.
+
+Tests, with no network: `data/.venv/bin/python -m pytest tenant/tests -q`.

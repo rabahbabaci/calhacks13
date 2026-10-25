@@ -288,3 +288,51 @@ The CLI prints `{case_id, report, dropped, usage}`. Show `report` to the tenant;
 **Env vars** (repo-root `.env`, see `agents/property/.env.example`): `ANTHROPIC_API_KEY_Property`, `APIFY_TOKEN_Property`, optional `COURTLISTENER_TOKEN_Property`, `SOCRATA_APP_TOKEN_Property` (higher rate limits), and `STDB_URL_Property`, `STDB_DB_Property`, `STDB_TOKEN_Property` overrides.
 
 Tests: `data/.venv/bin/python -m unittest discover -s agents/property -p "test_*.py"` (offline).
+
+## 10. Tenant app (proposed)
+
+The website and iPhone shell (`web/`, `tenant/`). No new SpacetimeDB table: `packet` and `action` are already agent names, and the screens below are computed in code. Fixture mode does not write to the database. Live saves stay on the section 6 reducers once a run is allowed.
+
+**layout**, from the vision report, stored with the case only in the app for now:
+
+```json
+{"rooms": [{"id": "room_0", "name": "kitchen", "polygon": [[0, 0], [4, 0], [4, 3.5], [0, 3.5]], "height": 2.6,
+  "door": {"wall": "south", "center": 0.5, "width": 0.9},
+  "hazards": [{"hazard_id": "dampness_mold|kitchen counter", "icon": [2.0, 1.4, 3.3]}]}]}
+```
+
+Rooms follow the walk, by `first_seen_s`. `hazard_id` is the tag, a bar, and the location, which is how a hazard row joins the vision report.
+
+**packet tile** (agent `packet`, hazard `""`). One list, recomputed when a hazard is confirmed, a message is logged, or evidence is added.
+
+```json
+{"id": "form-complaint", "title": "Oakland property complaint (code enforcement)", "kind": "form",
+ "status": "ready", "needs": [], "changed": "",
+ "preview": {
+   "filled": [{"label": "Address", "value": "123 Example St, Oakland, CA 94612"}],
+   "still_needed": ["Your phone number", "A short description in your own words", "Your signature"],
+   "form": {"name": "Oakland property complaint (code enforcement)", "url": "https://www.oaklandca.gov/...", "official_form": true},
+   "steps": ["OAK311 app or online form, with address, description and optional photos."],
+   "note": "Opening the form does not mark this done."
+ }}
+```
+
+`kind` is `email`, `form`, or `phone`. The form URL is a pack `source_url` the legal run cited, or a statute URL that run cited. The steps are the pack procedure's `how` text. A procedure marked `legal_aid_question` or `eligibility_check_needed` is replaced with "Ask legal aid first" and the pack's legal-aid phone. Opening the link does not mark the tile done. The tenant marks it filed.
+
+**action draft** (agent `action`, hazard `""`), only when a letter is drafted by the model. The app's repair email and the form packet are built in code and do not use this until a live draft is allowed.
+
+```json
+{"subject": "Repair request", "sections": [{"text": "...", "source_ids": ["P1"]}]}
+```
+
+A section with no known source id is dropped. The legal pack's never_say rules apply, including a banned subject. The draft does not contain the form URL or the steps.
+
+**correspondence**, kept with the case and shown on Tracking:
+
+```json
+{"messages": [{"id": "fake-1", "direction": "out", "counterparty": "owner@example.com", "role": "landlord",
+  "subject": "Repair request", "status": "sent", "gmail_id": "fake-1", "at": "just now", "tile_id": "email-landlord|..."}],
+ "evidence": [{"evidence_id": "photo_1", "kind": "photo", "at": "just now"}]}
+```
+
+`role` is `landlord`, `legal_aid`, or `agency`. A sent landlord email marks that tile done and adds "Log their reply" until an inbound landlord message exists.

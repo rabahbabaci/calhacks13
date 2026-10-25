@@ -1,0 +1,6 @@
+{
+  "appId": "org.calhacks.home",
+  "appName": "Home",
+  "webDir": "dist",
+  "ios": { "contentInset": "automatic" }
+}
