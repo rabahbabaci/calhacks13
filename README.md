@@ -6,6 +6,8 @@ Built at Cal Hacks 13.0 (Oct 23–25, 2026) with **Claude**, **SpacetimeDB** and
 
 **Live:** https://www.goldilocks.casa
 
+**Demo video:** https://www.youtube.com/watch?v=0aPM4mRXlOE
+
 ![Architecture](docs/images/architecture.png)
 
 ## How it works
