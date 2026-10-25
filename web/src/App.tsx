@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ClinicGroup, type ClinicRow, type Clinics, type HazardDetail, type Home, type Me, type Message, type Preview, type StepGroup, type Tile } from "./api";
-import { clearMailToken, googleRedirectUri, listLandlordMail, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, takeGoogleReturn } from "./googleSignIn";
+import { clearMailToken, googleRedirectUri, listLandlordMail, mailtoHref, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, takeGoogleReturn } from "./googleSignIn";
 import { Analyze } from "./Analyze";
 import { Model } from "./Model";
 
@@ -589,6 +589,7 @@ export function App() {
   const [home, setHome] = useState<Home | null>(null);
   const [screen, setScreen] = useState<Screen>("model");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [address, setAddress] = useState("123 Example St, Oakland, CA 94612");
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -807,15 +808,24 @@ export function App() {
       return;
     }
     setError("");
+    setNotice("");
     setSending(true);
     try {
       const draft = preview.preview;
-      if (!GOOGLE_CLIENT_ID) {
-        throw new Error("Google is not configured, so this app cannot send Gmail.");
+      let viaGmail = true;
+      try {
+        if (!GOOGLE_CLIENT_ID) throw new Error("Google is not configured.");
+        const token = await requestGoogleMailToken();
+        await sendThroughGmail(token, dest, draft.subject, draft.body);
+      } catch (gmailErr) {
+        // No Gmail grant (demo tenant, "Sign in without Gmail", or a refused consent): hand the same
+        // draft to the tenant's mail app instead of stopping here. The record is kept either way.
+        viaGmail = false;
+        window.location.assign(mailtoHref(dest, draft.subject, draft.body));
+        setNotice(`Gmail is not connected (${String((gmailErr as Error).message || gmailErr)}), so the notice opened in your mail app. Press Send there.`);
       }
-      const token = await requestGoogleMailToken();
-      await sendThroughGmail(token, dest, draft.subject, draft.body);
       await api.send(preview.id, dest);
+      if (viaGmail) setNotice("");
       setPreview(null);
       const next = await refresh();
       await syncLandlordMail(next);
@@ -877,6 +887,7 @@ export function App() {
         )}
       </header>
       <main>
+        {notice && <p className="note">{notice}</p>}
         {error && (
           <p className="error">
             {error}
