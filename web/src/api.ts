@@ -136,11 +136,25 @@ export const api = {
     }),
   logout: () => call("/api/auth/logout", { method: "POST" }),
   home: () => call<Home>("/api/home"),
-  onboard: (address: string, file: File | null) => {
+  onboard: (address: string, file: File | null, onProgress?: (fraction: number) => void) => {
     const body = new FormData();
     body.set("address", address);
     if (file) body.set("video", file);
-    return call<Home>("/api/onboarding", { method: "POST", body });
+    // XHR instead of fetch so the upload can report progress; a phone video is the slow part.
+    return new Promise<Home>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/onboarding");
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total); };
+      xhr.onerror = () => reject(new Error("The upload failed. Check the connection and try again."));
+      xhr.onload = () => {
+        let data: { error?: string } & Home = {};
+        try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* not json */ }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data as Home);
+        else reject(new Error(data.error || xhr.statusText || "Upload failed."));
+      };
+      xhr.send(body);
+    });
   },
   hazard: (id: string) => call<HazardDetail>("/api/hazards/" + encodeURIComponent(id)),
   confirm: (id: string) => call<HazardDetail>("/api/hazards/" + encodeURIComponent(id) + "/confirm", { method: "POST" }),

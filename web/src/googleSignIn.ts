@@ -136,6 +136,14 @@ export async function sendThroughGmail(accessToken: string, to: string, subject:
   return data;
 }
 
+/** Gmail snippets are HTML-escaped ("we&#39;ll"); show the characters the landlord typed. */
+function decodeEntities(text: string) {
+  if (!/[&]/.test(text)) return text;
+  const area = document.createElement("textarea");
+  area.innerHTML = text;
+  return area.value;
+}
+
 function headerOf(headers: { name?: string; value?: string }[] | undefined, name: string) {
   const match = (headers || []).find((row) => (row.name || "").toLowerCase() === name);
   return (match?.value || "").trim();
@@ -191,7 +199,7 @@ export async function listLandlordMail(accessToken: string, addresses: string[],
       counterparty: incoming ? (fromAddrs[0] || from) : (addressList(to).find((addr) => addrs.includes(addr)) || addrs[0]),
       subject: headerOf(headers, "subject"),
       at: headerOf(headers, "date") || "just now",
-      body: (message.snippet || "").trim(),
+      body: decodeEntities(message.snippet || "").trim(),
     });
   }
   if (!after) return rows;

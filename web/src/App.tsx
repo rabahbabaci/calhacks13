@@ -675,7 +675,7 @@ function MediaPicker({ file, onChange }: { file: File | null; onChange: (next: F
   const isVideo = Boolean(file?.type.startsWith("video/"));
   return (
     <div className="field">
-      <span>Video of the home <span className="optional">(optional)</span></span>
+      <span>Video of the home</span>
       <input ref={input} className="sr-only" type="file" accept="video/*,image/*" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { take(e.target.files); e.target.value = ""; }} />
       {file && url ? (
@@ -743,6 +743,7 @@ export function App() {
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
 
   async function refresh() {
     const next = await api.home();
@@ -901,10 +902,15 @@ export function App() {
       setError("Enter the address of the home.");
       return;
     }
+    if (!file) {
+      setError("Add a walkthrough video or a photo of the home. That is what the analysis reads.");
+      return;
+    }
     setError("");
     setStarting(true);
+    setUploadPct(0);
     try {
-      const next = await api.onboard(address, file);
+      const next = await api.onboard(address, file, (fraction) => setUploadPct(Math.round(fraction * 100)));
       setHome(next);
       setScreen("model");
     } catch (err) {
@@ -1049,8 +1055,16 @@ export function App() {
   useEffect(() => {
     if (!hasCase || !mailKey) return;
     syncLandlordMail();
-    const timer = window.setInterval(() => { syncLandlordMail(); }, awaitingReply ? 8000 : 30000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => { syncLandlordMail(); }, awaitingReply ? 3000 : 30000);
+    // Coming back from the landlord's inbox in another tab: check right away.
+    const onFocus = () => { if (document.visibilityState === "visible") syncLandlordMail(); };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [hasCase, mailKey, awaitingReply]);
   const showAnalyze = analyzing && (screen === "model" || screen === "case");
   const showModel = hasCase && screen === "model" && !analyzing;
@@ -1208,7 +1222,14 @@ export function App() {
               <small>For example: 123 Example St, Oakland, CA 94612</small>
             </label>
             <MediaPicker file={file} onChange={setFile} />
-            <button className="primary" type="submit" disabled={starting}>{starting ? (file ? "Uploading…" : "Starting…") : "Start the analysis"}</button>
+            <button className="primary" type="submit" disabled={starting}>
+              {starting ? (uploadPct < 100 ? `Uploading… ${uploadPct}%` : "Reading the walkthrough…") : "Start the analysis"}
+            </button>
+            {starting && (
+              <div className="upload-bar" role="progressbar" aria-label="Upload" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPct}>
+                <b style={{ width: `${Math.max(3, uploadPct)}%` }} />
+              </div>
+            )}
             <p className="note">{live
               ? "Each sign-in starts from scratch. We watch the walkthrough, look up the building, and draw the home. You confirm each hazard before health and legal notes load."
               : "The file is stored on this computer. The rooms and icons come from a saved walkthrough, so this step does not call Claude."}</p>
@@ -1276,7 +1297,7 @@ export function App() {
             ))}
             {(home.tracking?.evidence || []).length === 0 && <p className="note">No extra evidence yet.</p>}
             <h2>Correspondence</h2>
-            <Correspondence messages={home.tracking?.messages} tenant={home.name || ""} checked={mailChecked} awaiting={awaitingReply} />
+            <Correspondence messages={home.tracking?.messages} tenant={home.name || ""} landlord={home.landlord?.contact?.name || home.landlord?.company || ""} checked={mailChecked} awaiting={awaitingReply} />
           </section>
         )}
       </main>
@@ -1516,7 +1537,9 @@ function replyText(body: string) {
   return own || body.trim();
 }
 
-function MailTile({ item, tenant }: { item: Message; tenant: string }) {
+function MailTile({ item, tenant, landlord }: { item: Message; tenant: string; landlord: string }) {
+  const who = landlord && landlord !== "Landlord" ? landlord : "Landlord";
+  const initials = who.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "LL";
   const [open, setOpen] = useState(false);
   const sent = item.direction === "out";
   const text = sent ? (item.body || "") : replyText(item.body || "");
@@ -1525,9 +1548,9 @@ function MailTile({ item, tenant }: { item: Message; tenant: string }) {
   return (
     <div className={"chat-row " + (sent ? "is-sent" : "is-received")}>
       <div className="chat-who">
-        <span className="chat-avatar" aria-hidden="true">{sent ? "You" : "LL"}</span>
+        <span className="chat-avatar" aria-hidden="true">{sent ? "You" : initials}</span>
         <span>
-          <strong>{sent ? (tenant || "You") : "Landlord"}</strong>
+          <strong>{sent ? (tenant || "You") : who}</strong>
           <small>{sent ? `to ${item.counterparty}` : item.counterparty} · {mailWhen(item.at)}</small>
         </span>
       </div>
@@ -1544,7 +1567,7 @@ function MailTile({ item, tenant }: { item: Message; tenant: string }) {
   );
 }
 
-function Correspondence({ messages, tenant, checked, awaiting }: { messages?: Message[]; tenant: string; checked: number; awaiting: boolean }) {
+function Correspondence({ messages, tenant, landlord, checked, awaiting }: { messages?: Message[]; tenant: string; landlord: string; checked: number; awaiting: boolean }) {
   const thread = threadMessages(messages);
   if (!thread.length) {
     return (
@@ -1558,12 +1581,12 @@ function Correspondence({ messages, tenant, checked, awaiting }: { messages?: Me
     <>
       <p className="note">Your notice and every reply after it, in order. Replies are read from your Gmail.</p>
       <div className="chat-thread">
-        {thread.map((item) => <MailTile key={item.id} item={item} tenant={tenant} />)}
+        {thread.map((item) => <MailTile key={item.id} item={item} tenant={tenant} landlord={landlord} />)}
       </div>
       {awaiting && (
         <p className="note chat-live">
           <span className="chat-dot" aria-hidden="true" />
-          Waiting for the landlord. Your inbox is checked every few seconds
+          Waiting for {landlord && landlord !== "Landlord" ? landlord : "the landlord"}. Your inbox is checked every few seconds
           {checked ? `, last at ${new Date(checked).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}.
         </p>
       )}
