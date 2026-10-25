@@ -64,6 +64,8 @@ export type Preview = {
   note: string;
 };
 
+export type Me = { signed_in: boolean; dev_login: boolean; google: boolean; case_id?: string; name?: string; email?: string };
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: "include", ...init });
   const text = await res.text();
@@ -73,8 +75,15 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  me: () => call<{ signed_in: boolean; case_id?: string; name?: string }>("/api/me"),
+  me: () => call<Me>("/api/me"),
   login: () => call("/api/dev/login", { method: "POST" }),
+  google: (credential: string) =>
+    call("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    }),
+  logout: () => call("/api/auth/logout", { method: "POST" }),
   home: () => call<Home>("/api/home"),
   onboard: (address: string, file: File | null) => {
     const body = new FormData();
