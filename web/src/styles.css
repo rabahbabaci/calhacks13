@@ -277,3 +277,20 @@ main { padding: 16px; max-width: 880px; width: 100%; margin: 0 auto; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(228, 194, 122, 0.08); } }
 @keyframes scan { 50% { transform: translateX(80%); } }
 @keyframes drift { 50% { transform: translate3d(8px, -10px, 0) scale(1.08); opacity: 0.7; } }
+
+/* Case screen: next action, timeline, home summary. Uses the card and hazard-btn styles above. */
+.case { display: flex; flex-direction: column; gap: 14px; }
+.case-next h2 { margin: 4px 0 6px; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 26px; }
+.case-next > p { margin: 0 0 12px; font-size: 15px; line-height: 1.45; }
+.case-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.case-head h2 { margin: 0; }
+.case-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.case-steps li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; align-items: start; padding: 8px 6px; border-radius: 12px; }
+.case-steps li.is-now { background: rgba(166, 132, 44, 0.1); box-shadow: inset 0 0 0 1px rgba(166, 132, 44, 0.3); }
+.case-steps li.is-later { opacity: 0.6; }
+.case-mark { width: 14px; height: 14px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
+.case-steps .is-done .case-mark { border-color: var(--low); background: var(--low); }
+.case-steps .is-now .case-mark { border-color: var(--moderate); background: var(--moderate); box-shadow: 0 0 0 5px rgba(166, 132, 44, 0.18); }
+.case-steps strong { display: block; font-size: 15px; }
+.case-steps small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: #5c564c; }
+.case-landlord { margin-top: 10px; }
