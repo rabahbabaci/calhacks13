@@ -21,9 +21,9 @@ Adding an agent: one line in AGENTS (per confirmed hazard) or CASE_AGENTS (once 
 case, hazard ""). Property is case-level: it launches when the case has an address
 and has no property run. Health and legal still wait for confirm_hazard.
 
-Env: STDB_URL etc. from .env (see docs/stack-findings.md). The legal agent wants
-ANTHROPIC_API_KEY_Legal and APIFY_TOKEN_Legal; when unset they fall back to
-ANTHROPIC_API_KEY and APIFY_TOKEN.
+Env: STDB_URL etc. from .env (see docs/stack-findings.md). The legal and property agents
+want ANTHROPIC_API_KEY_Legal / _Property and APIFY_TOKEN_Legal / _Property; when unset they
+fall back to ANTHROPIC_API_KEY and APIFY_TOKEN. Property is off by default (--agents).
 """
 import argparse
 import importlib.util
@@ -48,8 +48,9 @@ def load_env():
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip().removeprefix("export ").strip(), v.strip().strip('"').strip("'"))
     for key in ("ANTHROPIC_API_KEY", "APIFY_TOKEN", "COURTLISTENER_TOKEN"):
-        if os.environ.get(key) and not os.environ.get(f"{key}_Legal"):
-            os.environ[f"{key}_Legal"] = os.environ[key]
+        for suffix in ("_Legal", "_Property"):
+            if os.environ.get(key) and not os.environ.get(key + suffix):
+                os.environ[key + suffix] = os.environ[key]
 
 
 load_env()
@@ -250,7 +251,7 @@ def main():
     ap.add_argument("--once", action="store_true", help="exit when nothing is running or launchable")
     ap.add_argument("--workers", type=int, default=WORKERS)
     ap.add_argument("--timeout", type=float, default=RUN_TIMEOUT_S)
-    ap.add_argument("--agents", default="health,legal,property", help="comma-separated subset of agents")
+    ap.add_argument("--agents", default="health,legal", help="comma-separated subset of agents (add property to run it)")
     ap.add_argument("--wait", type=float, default=120, help="--once: seconds to wait for the first confirm before exiting")
     args = ap.parse_args()
 
