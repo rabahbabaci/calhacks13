@@ -1,0 +1,167 @@
+{
+  "key": "75fa561a034f3bd7b22840a4dd47765165c81981cf75d94c67d1226316eab574",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:01:29-0700",
+  "frames": [
+    {
+      "evidence_id": "video_1_t270s",
+      "t_s": 270.0,
+      "sha256": "e4d3ca412f867d6dbb1cf7f9e6e3fb5a699d82842b1ac3c65553abf48dbdd16a",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t277s",
+      "t_s": 277.0,
+      "sha256": "9a0c3dd0997b7300762390cbd5be39805df1b093bee6430e9e34a93ff860b9dd",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t282s",
+      "t_s": 282.0,
+      "sha256": "6db84fe61449fb5fb5bc2e44032a70e2e48cae264c3fc52f548b4854f852847b",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t285s",
+      "t_s": 285.0,
+      "sha256": "b96abf1d3972870c60bdce67bd78c10c332480e1b98dad88c504cf567c6d39a5",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t289s",
+      "t_s": 289.0,
+      "sha256": "c0579c9536a7dfdbcb307c08482c4abcec824ccc08d11e9332deb13fdc0e3c75",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t292s",
+      "t_s": 292.0,
+      "sha256": "b0b5a5a6d8f51408cf74ec55b9ef6348aa5529db32a97b652d8da1cb0dd1f622",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t296s",
+      "t_s": 296.0,
+      "sha256": "5bf8509703ad4272e915ee45b7c9b8f7984cb6472c79ecebac8a0ee6bbd9b4c4",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t299s",
+      "t_s": 299.0,
+      "sha256": "c553b45cb15c87da52f71ef9c817a197e25f6fbb8ddbac6fcf0920e8769969ce",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t303s",
+      "t_s": 303.0,
+      "sha256": "78b038c8bba03487247178e4809e780982d213c29fdb473cc124925b98f5fadd",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t306s",
+      "t_s": 306.0,
+      "sha256": "8ceb41f4e227beb57ca074cea675e82104509e390152cbda09b625291b2f46e3",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t310s",
+      "t_s": 310.0,
+      "sha256": "7cf339cd0176c58d4bfd4f8e8fa31e14903bb92083d917cccbab22439355aa37",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t325s",
+      "t_s": 325.0,
+      "sha256": "80e039a41d7fe3ab743123cb4bc276007b2440be291ddf3418a9f8032cd82cda",
+      "width": 768,
+      "height": 432
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01YSv3BKntteRgfV2yFPZdy8",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [
+            {
+              "hazard": "dampness_mold",
+              "location": "kitchen sink edge, around faucet base and backsplash joint",
+              "room": "kitchen",
+              "evidence_ids": [
+                "video_1_t285s",
+                "video_1_t289s"
+              ],
+              "observed_signs": [
+                "Dark grime or possible mold growth around faucet base and counter joint",
+                "Cracked, dirty sealant gap between backsplash tiles and counter"
+              ],
+              "severity": "low",
+              "severity_reason": "Dark residue is limited to a small spot on a surface meant to get wet, the sink edge.",
+              "extent": "spot",
+              "confidence": 0.4,
+              "needs_professional_check": true,
+              "check_reason": "Only a health or code officer can determine whether dark residue is mold.",
+              "bbox": [
+                0.55,
+                0.45,
+                0.85,
+                0.7
+              ]
+            }
+          ],
+          "unlabeled_observations": [
+            {
+              "description": "Rust-colored staining around the sink drain ring.",
+              "evidence_ids": [
+                "video_1_t292s"
+              ],
+              "suggested_tag": "rust_sink_drain"
+            },
+            {
+              "description": "Sealant between backsplash and counter is gapped and deteriorated near the faucet.",
+              "evidence_ids": [
+                "video_1_t285s"
+              ],
+              "suggested_tag": "failed_sealant"
+            }
+          ]
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 2478
+      },
+      "cache_creation_input_tokens": 2478,
+      "cache_read_input_tokens": 0,
+      "inference_geo": "global",
+      "input_tokens": 5870,
+      "output_tokens": 862,
+      "output_tokens_details": {
+        "thinking_tokens": 402
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "key": "c239a8e0d7bf5147973869b5ebd20dccebc20e994240b91f3a2a33f6d15852c2",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:01:51-0700",
+  "frames": [
+    {
+      "evidence_id": "photo_1",
+      "t_s": null,
+      "sha256": "4560ec69364a8a78225e6b679f01fcce99bab61b5bc2af1a8657bb557e679483",
+      "width": 768,
+      "height": 576
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01MCBFz1yXawuahAay9znc6u",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [],
+          "unlabeled_observations": []
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2478,
+      "inference_geo": "global",
+      "input_tokens": 774,
+      "output_tokens": 81,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

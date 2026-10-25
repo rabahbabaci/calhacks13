@@ -1,0 +1,45 @@
+{
+  "about": "Hand-written responses for unit tests. Segment 1 frames video_1_t010s..t012s, segment 2 frames video_1_t100s..t101s.",
+  "segment_1": {
+    "content": [{"type": "tool_use", "name": "report_hazards", "id": "toolu_unit_1", "input": {
+      "hazards": [
+        {"hazard": "dampness_mold", "location": "bathroom wall, behind toilet", "room": "Bathroom",
+         "bbox": [0.1, 0.5, 0.4, 0.9], "evidence_ids": ["video_1_t011s"],
+         "observed_signs": ["dark spotting along the tile joint"], "severity": "low",
+         "severity_reason": "small spot", "extent": "spot", "confidence": 0.6,
+         "needs_professional_check": false, "check_reason": ""},
+        {"hazard": "exposed_wiring", "location": "bathroom wall, light switch", "room": "bathroom",
+         "evidence_ids": ["video_1_t012s"],
+         "observed_signs": ["switch cover missing, wires visible"], "severity": "low",
+         "severity_reason": "wires visible", "extent": "spot", "confidence": 0.3,
+         "needs_professional_check": false, "check_reason": ""},
+        {"hazard": "structural_crack", "location": "bathroom wall", "room": "bathroom",
+         "evidence_ids": ["video_1_t010s"],
+         "observed_signs": ["long crack"], "severity": "moderate", "severity_reason": "crack",
+         "extent": "patch", "confidence": 0.8, "needs_professional_check": true, "check_reason": "structural"},
+        {"hazard": "water_leak", "location": "bathroom ceiling", "room": "bathroom",
+         "evidence_ids": ["video_1_t999s"],
+         "observed_signs": ["stain"], "severity": "low", "severity_reason": "stain", "extent": "spot",
+         "confidence": 0.7, "needs_professional_check": false, "check_reason": ""}
+      ],
+      "unlabeled_observations": [
+        {"description": "rust on the shower head", "evidence_ids": ["video_1_t010s"], "suggested_tag": "rust_corrosion"},
+        {"description": "made-up frame", "evidence_ids": ["video_1_t500s"], "suggested_tag": "x"}
+      ]
+    }}],
+    "usage": {"input_tokens": 5000, "output_tokens": 800, "cache_creation_input_tokens": 1200, "cache_read_input_tokens": 0}
+  },
+  "segment_2": {
+    "content": [{"type": "tool_use", "name": "report_hazards", "id": "toolu_unit_2", "input": {
+      "hazards": [
+        {"hazard": "dampness_mold", "location": "bathroom ceiling corner", "room": "bathroom ",
+         "evidence_ids": ["video_1_t100s", "video_1_t101s"],
+         "observed_signs": ["grey patch with possible mold growth", "dark spotting along the tile joint"],
+         "severity": "moderate", "severity_reason": "patch on ceiling", "extent": "patch", "confidence": 1.7,
+         "needs_professional_check": true, "check_reason": "a code officer must determine mold"}
+      ],
+      "unlabeled_observations": []
+    }}],
+    "usage": {"input_tokens": 4000, "output_tokens": 600, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 1200}
+  }
+}

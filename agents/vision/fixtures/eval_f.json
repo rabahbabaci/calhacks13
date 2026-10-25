@@ -1,0 +1,162 @@
+{
+  "key": "556c9c168d2b0f3d159242ff4b39b4be49b8bd5040db4077e7804589267eb852",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:02:00-0700",
+  "frames": [
+    {
+      "evidence_id": "video_1_t605s",
+      "t_s": 605.0,
+      "sha256": "fa200a1d1ba991cf5577f0a8946f39a1191abd83bb2fab3569cc46765578b1c4",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t606s",
+      "t_s": 606.0,
+      "sha256": "50c713c718c2151187b7bb919d52af4b00697ad72862b7fbb1b09c1edbdd6c25",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t607s",
+      "t_s": 607.0,
+      "sha256": "4cd89b11a6231b54f685037128a3e7967b83be3f6d7b5dc66093b3395b5fd098",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t608s",
+      "t_s": 608.0,
+      "sha256": "f353ac8aa0f181fbc27362b14af6ea542128c54df1984e2d939935bdb6989b28",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t609s",
+      "t_s": 609.0,
+      "sha256": "826ecaa12cb56e61c08889890b940754195d66948de31956d706dd53f1677781",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t610s",
+      "t_s": 610.0,
+      "sha256": "03029c26e16f43f48116dadd4d54ca2a1582e73803dc2eb098701a84b734a820",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t611s",
+      "t_s": 611.0,
+      "sha256": "a3ca86daabdf867102c9e2c6c6b685db03d148ae55332804976efe2ab2d7a3d1",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t612s",
+      "t_s": 612.0,
+      "sha256": "2c5d5f55c24904cc6e9cd577ccc7de23d424770b2f4b40bc749b8963107d2d4c",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t613s",
+      "t_s": 613.0,
+      "sha256": "da41c3b9332e1e462a2192d826c97469ba410df8e27b711dec8f56ae38d6a88c",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t614s",
+      "t_s": 614.0,
+      "sha256": "103a0636edbdb5a5a4ce8fc0ff0d49b48eb1fa14b76b2ebbc720b0f6d88bc091",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t615s",
+      "t_s": 615.0,
+      "sha256": "18384f5d30044b354d41c677e5a13dd2275c7aa21746ccb51e6cc91fd08ab282",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t616s",
+      "t_s": 616.0,
+      "sha256": "cc2299f352d891f73ee20dfae5777e1180b7e579fdee5263c9e52a0cb3f92a94",
+      "width": 768,
+      "height": 432
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01U5Be8fsqMhuYuHSCUZUqh6",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [
+            {
+              "hazard": "dampness_mold",
+              "location": "bathroom shower wall tile grout and drain surround",
+              "room": "bathroom",
+              "evidence_ids": [
+                "video_1_t609s",
+                "video_1_t610s",
+                "video_1_t614s"
+              ],
+              "observed_signs": [
+                "Dark spotting along tile grout lines in shower corner",
+                "Dark grime around the shower drain edge"
+              ],
+              "severity": "low",
+              "severity_reason": "Dark spotting is limited to grout and drain edges on a surface meant to get wet.",
+              "extent": "patch",
+              "confidence": 0.5,
+              "needs_professional_check": true,
+              "check_reason": "Only a health or code officer can determine whether the dark spotting is mold.",
+              "bbox": [
+                0.55,
+                0.3,
+                1.0,
+                0.9
+              ]
+            }
+          ],
+          "unlabeled_observations": [
+            {
+              "description": "Shower floor drain has dirty, dark buildup and looks grimy around the grate.",
+              "evidence_ids": [
+                "video_1_t613s",
+                "video_1_t614s"
+              ],
+              "suggested_tag": "dirty_drain"
+            }
+          ]
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2478,
+      "inference_geo": "global",
+      "input_tokens": 5870,
+      "output_tokens": 397,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

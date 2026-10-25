@@ -1,0 +1,82 @@
+{
+  "key": "33186d659182f3faa64bbee3b558ad41f0e5e6768f394d963107f9a965098e69",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:01:54-0700",
+  "frames": [
+    {
+      "evidence_id": "photo_1",
+      "t_s": null,
+      "sha256": "a88287ebc15179786f64e6057cfbe5bfe7fff3cebe741b3ac77a81cfb1cb1241",
+      "width": 576,
+      "height": 768
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01XPEF1WRe3rgWMMf1ihj2Qh",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [
+            {
+              "hazard": "exposed_wiring",
+              "location": "wall switch box, switches pulled out of wall",
+              "room": "unknown room",
+              "evidence_ids": [
+                "photo_1"
+              ],
+              "observed_signs": [
+                "Two switches hang out of open electrical box with wires visible",
+                "No cover plate; drywall around box is broken and ragged"
+              ],
+              "severity": "urgent",
+              "severity_reason": "Open junction box with uncovered wires and unmounted switches is visible.",
+              "extent": "spot",
+              "confidence": 0.9,
+              "needs_professional_check": true,
+              "check_reason": "A licensed electrician must assess whether the wiring is safe and working.",
+              "bbox": [
+                0.08,
+                0.22,
+                0.9,
+                0.88
+              ]
+            }
+          ],
+          "unlabeled_observations": [
+            {
+              "description": "Drywall around the switch box is broken and crumbling.",
+              "evidence_ids": [
+                "photo_1"
+              ],
+              "suggested_tag": "damaged_wall"
+            }
+          ]
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2478,
+      "inference_geo": "global",
+      "input_tokens": 774,
+      "output_tokens": 357,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "case_id": "case_vision_jakarta",
+  "address": "123 Example St, Oakland, CA 94612",
+  "jurisdiction": {"state": "CA", "city": "Oakland"},
+  "household": {"children": false, "older_adults": false, "pregnancy": false, "breathing_condition": false},
+  "notes": "demo footage from Jakarta; legal grounding is illustrative",
+  "source_url": "https://www.youtube.com/watch?v=wFxmYq9wCWM"
+}

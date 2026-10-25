@@ -1,0 +1,218 @@
+{
+  "key": "66df62ab99b66398934865e8011c5e66f216c7cfd477569da177f30b72d340ee",
+  "model": "claude-sonnet-5-5",
+  "recorded_at": "2026-10-24T19:01:50-0700",
+  "frames": [
+    {
+      "evidence_id": "video_1_t590s",
+      "t_s": 590.0,
+      "sha256": "a767c63324027da889b6667af98866ce4f7fe7821f5d9bc1edc814b8f97382ff",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t595s",
+      "t_s": 595.0,
+      "sha256": "a46418446ff30ddcbc496d5686ce40be4395f28f5899892ec4c6c11231656512",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t600s",
+      "t_s": 600.0,
+      "sha256": "ab62a81a2eeb076f86eea4debb4e0533c0784b13b9eb0d3966bce75bd74bd8d2",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t605s",
+      "t_s": 605.0,
+      "sha256": "fa200a1d1ba991cf5577f0a8946f39a1191abd83bb2fab3569cc46765578b1c4",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t610s",
+      "t_s": 610.0,
+      "sha256": "03029c26e16f43f48116dadd4d54ca2a1582e73803dc2eb098701a84b734a820",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t615s",
+      "t_s": 615.0,
+      "sha256": "18384f5d30044b354d41c677e5a13dd2275c7aa21746ccb51e6cc91fd08ab282",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t620s",
+      "t_s": 620.0,
+      "sha256": "da534700838ec63f143245270adf1ae6f61a32b922d02e6905db996c4b0a43eb",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t625s",
+      "t_s": 625.0,
+      "sha256": "47db6bc2b0515702871fadf9c3f41e2221140383a91153760857785546d29fc3",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t631s",
+      "t_s": 631.0,
+      "sha256": "9bbae390cb3a08b5d7bb5be5aac9ffaef8596171133817254574dd1fb03603bc",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t636s",
+      "t_s": 636.0,
+      "sha256": "f7365444e6a88742f3873e74d0bccc36dc063a3074ed61bc1b6c8dd8027594b6",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t641s",
+      "t_s": 641.0,
+      "sha256": "49192ace949c8f975bd73daa640fea229fad6c3b671205e996ddf6c29442a0a4",
+      "width": 768,
+      "height": 432
+    },
+    {
+      "evidence_id": "video_1_t646s",
+      "t_s": 646.0,
+      "sha256": "caa7feff27ac52db1522e58a7ac4e1cf97318e6a434f2c575a39540b489da58e",
+      "width": 768,
+      "height": 432
+    }
+  ],
+  "response": {
+    "content": [
+      {
+        "id": "toolu_01RM3THztUjuheJQypKda6Wm",
+        "caller": {
+          "type": "direct"
+        },
+        "input": {
+          "hazards": [
+            {
+              "hazard": "dampness_mold",
+              "location": "bathroom shower wall tile grout and lower walls",
+              "room": "bathroom",
+              "evidence_ids": [
+                "video_1_t590s",
+                "video_1_t610s"
+              ],
+              "observed_signs": [
+                "Dark spotting along tile grout lines in shower",
+                "Grimy dark staining in shower corner"
+              ],
+              "severity": "low",
+              "severity_reason": "Dark grout spotting is on shower surfaces meant to get wet, so it is low.",
+              "extent": "patch",
+              "confidence": 0.5,
+              "needs_professional_check": true,
+              "check_reason": "Only a health or code officer can determine whether this is mold."
+            },
+            {
+              "hazard": "water_leak",
+              "location": "bathroom ceiling and upper wall corner",
+              "room": "bathroom",
+              "evidence_ids": [
+                "video_1_t625s",
+                "video_1_t641s"
+              ],
+              "observed_signs": [
+                "Brownish water-stain patches on ceiling with peeling paint",
+                "Dark staining line along ceiling-wall joint"
+              ],
+              "severity": "low",
+              "severity_reason": "Visible ceiling stains with no active drip or sagging seen.",
+              "extent": "patch",
+              "confidence": 0.6,
+              "needs_professional_check": true,
+              "check_reason": "The source of moisture needs inspection to confirm."
+            },
+            {
+              "hazard": "dampness_mold",
+              "location": "bathroom ceiling and upper wall near ceiling",
+              "room": "bathroom",
+              "evidence_ids": [
+                "video_1_t625s",
+                "video_1_t641s",
+                "video_1_t636s"
+              ],
+              "observed_signs": [
+                "Dark spotting along ceiling edge",
+                "Yellowish-brown staining streaks on upper wall"
+              ],
+              "severity": "high",
+              "severity_reason": "Dark spotting and staining are on the ceiling area, which is rated high.",
+              "extent": "patch",
+              "confidence": 0.45,
+              "needs_professional_check": true,
+              "check_reason": "Only a health or code officer can determine whether growth is mold."
+            },
+            {
+              "hazard": "lead_paint",
+              "location": "bathroom ceiling, peeling paint",
+              "room": "bathroom",
+              "evidence_ids": [
+                "video_1_t625s",
+                "video_1_t641s"
+              ],
+              "observed_signs": [
+                "Paint peeling and flaking on ceiling in patches"
+              ],
+              "severity": "moderate",
+              "severity_reason": "Peeling paint is visible on the ceiling.",
+              "extent": "patch",
+              "confidence": 0.5,
+              "needs_professional_check": true,
+              "check_reason": "Paint testing is needed to know if it is a lead hazard."
+            }
+          ],
+          "unlabeled_observations": [
+            {
+              "description": "Visible crack running down the bathroom wall above the shower head.",
+              "evidence_ids": [
+                "video_1_t620s"
+              ],
+              "suggested_tag": "wall_crack"
+            },
+            {
+              "description": "Long crack or stain line down the bathroom wall near the towel rack.",
+              "evidence_ids": [
+                "video_1_t636s"
+              ],
+              "suggested_tag": "wall_crack"
+            }
+          ]
+        },
+        "name": "report_hazards",
+        "type": "tool_use",
+        "toolset_name": null
+      }
+    ],
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2478,
+      "inference_geo": "global",
+      "input_tokens": 5870,
+      "output_tokens": 993,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": null,
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "stop_reason": "tool_use"
+  }
+}

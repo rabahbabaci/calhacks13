@@ -2,11 +2,13 @@
 
 Running log for the SpacetimeDB module and the health corpus ingest. Updated with every commit from this workstream.
 
-## Status (Sat Oct 24, 6:00 PM PT)
+## Status (Sat Oct 24, 6:35 PM PT)
 
 | Item | State |
 |---|---|
 | Shared team db (Maincloud) | Live: https://maincloud.spacetimedb.com, database `home`, 15 sources / 110 chunks |
+| Live core tables (section 6) | Live: case_file, hazard, agent_run + 6 reducers, 11/11 tests, health agent records runs |
+| Legal tables (section 7) | Live: legal_source + add_legal_source (Ansh, PR #1) |
 | SpacetimeDB module `home` | Live on Rabah's laptop, schema matches docs/contracts.md section 4 |
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
 | urls.csv validation | Done: 16 of 17 valid, 8 hazards covered (no gas_leak) |
@@ -87,6 +89,52 @@ curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/
 
 HTTP 200 means committed. HTTP 530 means the reducer rejected it, with the reason in the body.
 
+### Live core: cases, hazards, agent runs (contracts.md section 6)
+
+Reducers (all positional JSON arrays, in this order):
+- `create_case(case_id, address, payload_json)`: upsert
+- `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)`: case must exist, tag must be valid, confidence 0 to 1, evidence_ids_json a JSON array
+- `confirm_hazard(id, confirmed)`: the tenant's yes/no
+- `start_run(case_id, agent, hazard)`: creates the row or resets it to running (payload and error cleared)
+- `finish_run(case_id, agent, hazard, payload_json)`: running to done
+- `fail_run(case_id, agent, hazard, error)`: running to failed
+- Agents: hazard, health, property, legal, packet, action. Use `""` as hazard for case-level agents.
+- Also live: `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)` (Ansh, section 7), plus the health reducers above.
+
+Start and finish a run. These use `case_example` so a copy-paste never resets a real case:
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/create_case -H 'Content-Type: application/json' --data '["case_example","123 Example St, Oakland, CA 94612","{\"case_id\":\"case_example\"}"]'
+```
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/start_run -H 'Content-Type: application/json' --data '["case_example","property",""]'
+```
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/finish_run -H 'Content-Type: application/json' --data '["case_example","property","","{\"owner_records\":[]}"]'
+```
+
+From Python: `call_reducer("start_run", [case_id, "property", ""])`, then `call_reducer("finish_run", [case_id, "property", "", json.dumps(output)])`, or `fail_run` with the error string.
+
+UI subscriptions:
+
+```
+SELECT * FROM hazard WHERE case_id = 'case_demo_001'
+```
+
+```
+SELECT * FROM agent_run WHERE case_id = 'case_demo_001'
+```
+
+Same queries work as one-off reads over `/sql`.
+
+Known gaps:
+- `pending` is a valid status, but no reducer writes it. A run row only appears at `start_run`.
+- Hazard rows only appear when someone calls `add_hazard` (the hazard detection agent, #1). The health agent reads hazards from the case input, so case_demo_001 has agent_run rows but no hazard rows yet.
+
+Test everything end to end: `bash data/test_core.sh https://maincloud.spacetimedb.com home` (11 checks, writes to `case_core_test` only).
+
 ### Rules
 
 - Writes go through reducers only (add_source, add_chunk, save_assessment).
@@ -158,6 +206,14 @@ Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fi
 - Gotcha: appending to `.env` with printf glued text onto ANTHROPIC_API_KEY because `.env` had no trailing newline. Repaired and verified. Check the trailing newline before appending.
 - Gotcha: zsh globs an unquoted `--include=*.py`. Quote it.
 - After the re-login the CLI may no longer own the local `home`. Local reads still work. To republish locally, use a new local name and `--from-cache`.
+
+### Step 8: live core tables + legal merge (6:11 to 6:35 PM)
+- Section 6 was not on main at first (the planning chat drafted it but never committed). Committed it as d730d66 before writing code.
+- Added case_file, hazard, agent_run and the 6 reducers. Tested on a fresh local db `home-dev` first, then published to Maincloud without `--delete-data`. The migration plan showed only created tables; corpus stayed at 15 / 110.
+- data/test_core.sh: 11 curl checks (happy path, reset and fail lifecycle, 4 rejections). 11/11 on local and on Maincloud.
+- Ansh's PR #1 (legal agent) conflicted on the module and contracts. He merged main and redesigned to use agent_run for results, keeping only `legal_source`. Tested his branch in a temporary worktree (30/30 unit tests, typecheck, section 6 regression 11/11, 4 add_legal_source checks), merged, published.
+- Health agent: start_run / finish_run / fail_run per assessed hazard, creates case_file if missing, still saves health_assessment. Evals 9/9 with save=False (no writes). Real run on case_demo_001: 3 hazards, 3 runs done, 0 dropped.
+- Only the module owner can publish `home`, so a teammate's branch can never change Maincloud by accident.
 
 ## Production items (not this weekend)
 - Open writes: every reducer accepts anonymous callers, so anyone with the URL can add sources, chunks or assessments.
@@ -245,3 +301,115 @@ result = assess_case(case, save=True)   # case = contracts.md section 3 object, 
 - Team sync: decide whether `notes` enters the contract, and how #5 consumes `not_assessed` and `dropped`.
 - Parallelize hazards if latency matters for the demo.
 - Rerun evals after the data layer adds the dedicated cockroach and electrical sources.
+
+## Vision agent (Divit)
+
+Agent #1, computer vision hazard detection. Code in `agents/vision/`. Built Sat 6:30 to 7:00 PM PT.
+
+**Status:** 78/78 unit tests pass with no API calls. 6/6 behavioral evals pass, replaying for free from fixtures (first recording $0.187, re-recorded after the speed changes for $0.135). A 5-minute video runs end to end in 26 seconds for about $0.15. `--save` writes to the live hazard and agent_run tables (see Saving to SpacetimeDB).
+
+### How to use it
+
+```python
+import sys; sys.path.insert(0, "agents/vision")
+from agent import analyze, ResponseCache
+out = analyze(case, [{"type": "video", "path": "walkthrough.mp4", "start": 270, "end": 330}],
+              cache=ResponseCache("agents/vision/out/cache"), live=True, save=False)
+out["case_input"]     # contracts.md section 3, pass straight to agents/health assess_case()
+out["vision_report"]  # contracts.md section 8
+```
+
+- CLI: `data/.venv/bin/python agents/vision/agent.py CASE.json --video V.mp4 --segment 270-330 [--segment ...] [--photo P.jpg] [--dry-run] [--live] [--save]`
+- `--dry-run` extracts frames and prints the estimated cost, no API call. Without `--live`, only cached responses in `agents/vision/out/cache/` are used, so a rerun never spends credits by accident.
+- Needs ffmpeg (`brew install ffmpeg`), and `anthropic`, `Pillow`, `pytest`, `yt-dlp` in `data/.venv`. For a user-scoped key (`sk-ant-usr-...`), also set `ANTHROPIC_WORKSPACE_ID=wrkspc_...` in `.env`; the agent sends it as the `anthropic-workspace-id` header.
+
+Tests and evals (repo root):
+
+```
+data/.venv/bin/python -m pytest agents/vision/tests -q          # unit, zero API calls
+data/.venv/bin/python agents/vision/evals.py                     # replay all 6 from fixtures, free
+data/.venv/bin/python agents/vision/evals.py --dry-run           # frames + estimated cost, no API call
+data/.venv/bin/python agents/vision/evals.py --live --budget-usd 0.50   # calls Claude only where a fixture is missing or stale
+```
+
+Replay works without the media too, from the frames recorded in each fixture. To rebuild the media locally (gitignored, never committed), see the header of `agents/vision/evals.py`.
+
+### Design
+
+1. Frames, no LLM (`frames.py`): ffmpeg samples 1 frame per second within the segment and scales to a long edge of 768px in the same pass, skipping audio. A 64-bit difference hash written with Pillow drops near-duplicates (Hamming distance 6 or less). The cap is 12 frames per segment, picked evenly. IDs are `video_1_t285s`, with seconds counted from the start of the source video, or `photo_1`. There is no face filter; the prompt says never to cite face or title frames, and the evals check it.
+2. One Claude call per segment (`agent.py`), on `claude-sonnet-5-5` with all frames in a single message. Segments run in parallel (up to 6 threads, one shared client), so total time is the slowest segment, not the sum. There is one tool, `report_hazards`, whose `hazard` field is an enum of the 9 tags. Anything that fits no tag goes in `unlabeled_observations`. The model writes only hazards and unlabeled observations, with at most 2 signs per hazard. Code derives `rooms` and `not_visible_from_video`, since output tokens are what set latency.
+3. Validator in code, after the model. A hazard is dropped if it has an unknown tag, an evidence_id that wasn't sent, empty observed_signs, a bbox outside 0-1, any pack `never_say` phrase in any text field, or (for lead_paint) wording that says lead is present. Confidence is clamped to 0-1. `first_seen_s` is recomputed from the cited frames, not taken from the model. The same tag in the same room is merged across frames and segments, and `confirmed_by_tenant` is always false.
+4. Rubric in code (`rules.py`). Code never lowers urgent tags: exposed_wiring, gas_leak and carbon_monoxide are always urgent and are reported at any confidence. dampness_mold on a ceiling or in a bedroom is at least high. lead_paint is always moderate with needs_professional_check.
+5. Legal in code: each hazard gets its `data/packs/ca_oakland.json` entry (cockroaches resolves to rodents via `same_as`), with citations, landlord_duty and cautions. The model never writes legal text. Urgent hazards also carry the health agent's fixed `urgent_message`.
+6. Record/replay. The cache key is a hash of the model, system prompt, tool schema, prompt text and frame hashes. Fixtures hold the response and frame metadata, with no image bytes. A prompt or frame change shows up as a stale fixture instead of a silent rerun. `--budget-usd` aborts before a call would pass the budget. The system prompt uses prompt caching: about 2.7k tokens read from cache on every call after the first.
+
+### Real-video test
+
+Source: [The WORST APARTMENT in Jakarta!](https://www.youtube.com/watch?v=wFxmYq9wCWM) (11:40). Segments were picked from 10-second and 2-second contact sheets reviewed by eye, with no API calls. The case uses Oakland as a demo stand-in, with notes "demo footage from Jakarta; legal grounding is illustrative", and the report carries that note.
+
+| Eval | Input | Result |
+|---|---|---|
+| a | kitchen, 4:30 to 5:30 | dampness_mold low (0.40) at the faucet sealant, flagged as a wet surface. Cockroaches correctly not reported: they are only in the caption, and the model wrote "no live or dead insects ... visible in any frame" |
+| b | balcony, 8:40 to 9:40 | lead_paint moderate + professional check (peeling sill paint), dampness_mold low (0.30). Rust and cracks went to unlabeled |
+| c | bathroom, 9:50 to 10:50 | dampness_mold high (ceiling and wall joint), water_leak low (ceiling tide-line stain). Cracks went to unlabeled |
+| d | clean hotel room photo, CC0 ([source](https://commons.wikimedia.org/wiki/File:Room_at_Hotel_Mercosur_Universitas.jpg)) | zero hazards |
+| e | open switch box photo, public domain ([source](https://commons.wikimedia.org/wiki/File:Opened_light_switch.JPG)) | exposed_wiring urgent (0.85), 1941.1(a)(5) attached |
+| f | shower walls, 10:05 to 10:17 | dampness_mold low with the wet-surface flag |
+
+No hazard cited any of the 4 face or title frames that were sent.
+
+Unlabeled observations from the real-video test (for the tag decision):
+
+| Observation | Frames | Model's suggested tag | Possible tag |
+|---|---|---|---|
+| Brown rust-like staining around the kitchen sink drain ring | video_1_t292s | rust_sink_drain | rust_corrosion |
+| Counter and backsplash sealant gapped, dirty and deteriorated near the faucet | video_1_t285s, t289s | deteriorated_sealant | none (precursor to water_leak) |
+| Plug adapter and loose cords near the sink; outlets have covers, no bare wires | video_1_t296s, t306s | cords_near_sink | none |
+| Cracked concrete at the base of the balcony railing, rust staining on the posts and ledge | video_1_t556s | balcony_crack_and_rust | structural_damage, rust_corrosion |
+| Yellow-brown stains on balcony tiles, dirty scuffed walls and floor | video_1_t536s, t556s, t560s, t565s | balcony_dirt_and_stains | none (cleanliness) |
+| Crack down the bathroom wall near the shower head | video_1_t620s | wall_crack | structural_damage |
+| Faint crack and stain streak near the towel rack | video_1_t636s | wall_crack | structural_damage |
+| Shower drain frame dark with grime, drain cover corroded | video_1_t613s, t614s | dirty_drain | rust_corrosion |
+| Broken, crumbling drywall around the open switch box (eval e) | photo_1 | damaged_wall_opening | structural_damage |
+
+The two candidates that keep coming up are `rust_corrosion` (3 times) and `structural_damage` (4 times). Neither is a contract tag, and none has been added.
+
+### What worked
+
+- Captions said "cockroaches crawling around" and "covered in mold", and the vlog title says "Cockroaches, Mold, Rust". The model judged only what was visible, and listed cockroaches under not_visible_from_video.
+- The clean room came back with zero hazards and no padding.
+- No live hazard was dropped by the validator. The `unlabeled_observations` list soaked up everything off-tag instead of forcing it into the closest tag.
+- Room inference held up: kitchen, bathroom and balcony, and "unknown room" for the window sill and the switch-box photo, never a guess.
+
+### What broke, and the fix
+
+- The user-scoped key (`sk-ant-usr-...`) returned 400, "must include the anthropic-workspace-id header". Fix: `ANTHROPIC_WORKSPACE_ID` in `.env`, sent as a default header.
+- `claude-sonnet-5-5` returned 400, "tool_choice: type tool and any are not supported for this model". Fix: drop forced tool_choice. The prompt says to call report_hazards once, and code raises if it doesn't.
+- The shower grout came back as moderate: the `patch` floor raised it, ignoring the pack caution that surfaces meant to get wet are excluded. Fix in code, not the prompt, so the fixtures stayed valid: dampness_mold whose location mentions shower, tub or grout (and not a ceiling) is capped at low, or moderate if widespread, and gets `wet_surface: true`.
+- Eval c first failed with "rust not in unlabeled". The "rusty shower" was only in the caption; at 768px the shower head reads as scale. The check was too strict for the footage, so it now accepts rust or cracks, the same as eval b. Rust did land in unlabeled in a, b and f.
+- `data/.venv` did not exist on Divit's laptop. It was created fresh with Python 3.14 and anthropic 2.3.0.
+- Homebrew's default ffmpeg may not include drawtext, so the contact sheets are built in Pillow.
+
+### Cost, latency, limits
+
+- Call time follows output tokens, not frames: about 3 seconds fixed plus about 10ms per output token. The first version wrote 1.4k to 1.7k tokens per segment (15 to 20 seconds). Trimming the schema (code derives rooms and not-visible, at most 2 signs, short reasons) cut it to 0.2k to 1k (5 to 13 seconds), and every eval still passes. Re-recording the 6 fixtures cost $0.135.
+- **5-minute video test** (Jakarta 4:30 to 9:30, five 60-second segments in parallel, live): **26.0 seconds end to end, $0.152.** Extraction was about 2 seconds per segment, all at once. Calls took 11 to 15 seconds, except one segment that wrote 1.4k tokens and took 22.8 seconds, which set the total. Replaying the same run from cache takes 2.2 seconds, the fixed overhead. Result after merging: dampness_mold high (bedroom), lead_paint moderate (bedroom sill), dampness_mold low (kitchen), plus 8 unlabeled observations.
+- The slowest segment sets the total time. To get closer to 15 seconds, split into 30-second segments (about 6 frames each) so no single call writes much. Untested; it would cost about the same, since total frames are unchanged and the system prompt is cached.
+- Upload time is not included. For a phone, extract frames on the device and upload about 60 JPEGs (3 to 5 MB) instead of the video (300 to 600 MB at 1080p). `analyze()` already accepts prepared frames.
+- The cost estimate is close: about $0.036 estimated per 12-frame segment, against $0.022 to $0.039 actual (the high end is a segment that wrote 1.4k tokens).
+- Only 12 frames per segment, so short events can fall between samples. Use more, shorter segments rather than raising the cap.
+- No face filter: face frames are still sent, they just can't be cited. That's about 2 wasted frames per vlog segment.
+- Confidence is the model's own estimate, not a measured probability. The health agent skips anything under 0.5 that the tenant hasn't confirmed, so the kitchen and balcony dampness (0.40, 0.30) would only be assessed after tenant confirmation.
+- Model output is not deterministic. Re-record with `--live` after any prompt change: a stale fixture is reported, never silently reused.
+
+### Saving to SpacetimeDB
+
+- `--save` writes to the live core tables (section 6), with no module changes: `create_case`, then `start_run("hazard", "")`, then `add_hazard` for each new hazard, then `finish_run` with the vision_report, or `fail_run` on error. Details in contracts.md section 8. The earlier `hazard_detection` / `save_detection` proposal is dropped.
+- Checked against Maincloud by replaying the cached 5-minute run (no Claude spend) as `case_vision_jakarta`. It wrote the case, 3 unconfirmed hazard rows (ids 8 to 10), and the `hazard` run as `done` with a 15 KB payload. A second run added no rows.
+- Those 3 rows are still on Maincloud. Confirming one in the UI makes the orchestrator run health and legal on it, which spends Claude credits.
+
+### Next
+
+- Decide on `rust_corrosion` and `structural_damage` (see the table above) before adding any tag. Adding one touches contracts.md section 1, the module's HAZARDS set and the pack.
+- Optional local face filter to save about 2 frames per vlog segment.
+- UI: show `label`, `location`, the cited frames and the bbox; let the tenant confirm each hazard before it goes to the health agent.

@@ -175,7 +175,68 @@ The CLI also prints a wrapper per case: `{case_id, pack_id, assessments, not_ass
 
 **Env vars** (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.
 
-## 8. Property agent
+## 8. Vision agent output (proposed)
+
+The vision agent (`agents/vision/`) returns two objects per case.
+
+**case_input**: a section 3 object whose `hazards` are exactly the section 2 shape. Pass it straight to the health agent's `assess_case()`. `confirmed_by_tenant` is always `false` from the vision agent; the tenant confirms in the UI.
+
+**vision_report**: the full detail, one object per case.
+
+```json
+{
+  "case_id": "case_001",
+  "notes": "optional case notes, carried through",
+  "source": {"type": "video", "url_or_path": "...", "segments": [{"start": 270, "end": 330, "frames": ["video_1_t282s"]}]},
+  "frames": [{"evidence_id": "video_1_t282s", "t_s": 282.0, "path": "agents/vision/out/frames/case_001/video_1_t282s.jpg"}],
+  "hazards": [{
+    "hazard": "dampness_mold",
+    "label": "Visible dampness or possible mold growth",
+    "location": "kitchen counter, behind the faucet",
+    "room": "kitchen",
+    "bbox": [0.3, 0.4, 0.7, 0.7],
+    "bbox_frame": "video_1_t285s",
+    "evidence_ids": ["video_1_t285s"],
+    "first_seen_s": 285.0,
+    "observed_signs": ["dark residue along the backsplash joint"],
+    "severity": "moderate",
+    "severity_reason": "...",
+    "extent": "patch",
+    "confidence": 0.7,
+    "needs_professional_check": true,
+    "check_reason": "...",
+    "confirmed_by_tenant": false,
+    "legal": {"pack_id": "ca-oakland", "resolved_from": null, "citations": [{"cite": "...", "excerpt": "...", "source_url": "https://..."}],
+              "landlord_duty": "...", "cautions": ["..."], "disclaimer": "..."},
+    "urgent_message": "only for exposed_wiring, gas_leak, carbon_monoxide (same text as the health agent)"
+  }],
+  "unlabeled_observations": [{"description": "rust on the balcony railing", "evidence_ids": ["video_1_t556s"], "suggested_tag": "rust_corrosion"}],
+  "rooms": [{"room": "kitchen", "evidence_ids": ["video_1_t285s"]}],
+  "not_visible_from_video": ["carbon_monoxide: CO is invisible; check for a working CO alarm"],
+  "dropped": [ /* hazards removed by the validator, internal only */ ],
+  "usage": [ /* tokens, cost, cached flag, extract_s and call_s per segment, internal only */ ],
+  "wall_seconds": 25.7
+}
+```
+
+- `rooms` and `not_visible_from_video` are derived in code from the merged hazards: every tag with no finding is listed, with a fixed reason for carbon_monoxide, gas_leak and inadequate_heat.
+
+- `severity` is one of `low`, `moderate`, `high`, `urgent`. `exposed_wiring`, `gas_leak`, `carbon_monoxide` are always `urgent`.
+- `evidence_ids` are `video_<n>_t<seconds>s` (seconds from the start of the source video) or `photo_<n>`.
+- `legal` comes from `data/packs/<state>_<city>.json` in code; `{"status": "no_pack_for_jurisdiction"}` when no pack exists. The model never writes it.
+- `unlabeled_observations` are things that fit none of the section 1 tags. They are not hazards and are never saved as detections.
+- Show the tenant `hazards` (using `label`, never the raw tag), `unlabeled_observations` and `not_visible_from_video`. `dropped` and `usage` are internal.
+
+**Saving** (`--save`, or `analyze(..., save=True)`): writes to the live section 6 tables, in this order.
+
+1. `create_case(case_id, address, case stub JSON)`
+2. `start_run(case_id, "hazard", "")`, one case-level run per analysis
+3. `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)` for each hazard not already on the case. A row with the same tag and the same location, or a shared evidence frame, counts as already saved, so reruns don't duplicate. Rows start with `confirmed_by_tenant = false`.
+4. `finish_run(case_id, "hazard", "", vision_report)`. Frames carry only `evidence_id` and `t_s`, with no local paths. On any error after `start_run`, it calls `fail_run` with the error instead.
+
+The `hazard` row has no severity, label or legal field, so the UI joins each row to `agent_run.payload_json.hazards` on (hazard, location) to get them. After the tenant confirms a row, the orchestrator runs health and legal on it.
+
+## 9. Property agent
 
 `agents/property/agent.py`. The public history of a building from its address alone, for any US address. It doesn't use hazards. Input is a case object (section 3; only `case_id` and `address` are read), or `--address "..."` on the command line.
 

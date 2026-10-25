@@ -6,7 +6,7 @@ Usage (repo root):
   data/.venv/bin/python agents/property/agent.py --address "7951 MacArthur Blvd, Oakland, CA 94605" --no-save
 
 Input: a case object (docs/contracts.md section 3); only case_id and address are used. Hazards aren't needed.
-Output: docs/contracts.md section 8. With saving on, one agent_run row (agent "property", hazard "").
+Output: docs/contracts.md section 9. With saving on, one agent_run row (agent "property", hazard "").
 
 What it looks for: ownership and management, code violations, complaints and 311 reports,
 inspections (including HUD inspection scores), permits, enforcement, and lawsuits or news
