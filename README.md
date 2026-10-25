@@ -1,8 +1,10 @@
 # Goldilocks
 
-Help for renters living with unsafe housing. A tenant enters their address and films a walkthrough of their home. Claude agents spot hazards like mold, leaks, pests, exposed wiring or missing heat, and place them on a 3D floor plan. For each hazard the tenant confirms, the agents explain the health risk, the landlord's legal duty and the tenant's options, with a source cited for every claim. They also look up the building's public record and the landlord's contact details. The app then helps the tenant send a formal written notice from their own Gmail and track the landlord's reply. If the landlord doesn't fix the problem, it points the tenant to local legal aid and the right filing.
+Help for renters living with unsafe housing. A tenant enters their address and films a walkthrough of their home. Claude agents spot hazards like mold, leaks, pests, exposed wiring or missing heat, and place them on a 3D floor plan. For each hazard the tenant confirms, the agents explain the health risk, the landlord's legal duty and the tenant's options, with a source cited for every claim. They also look up the building's public record and the owner or manager listed in it. The app then helps the tenant send a formal written notice from their own Gmail and track the landlord's reply. If the landlord doesn't fix the problem, it points the tenant to local legal aid and the right filing.
 
 Built at Cal Hacks 13.0 (Oct 23–25, 2026) with **Claude**, **SpacetimeDB** and **Apify**.
+
+**Live:** https://www.goldilocks.casa
 
 ![Architecture](docs/images/architecture.png)
 
@@ -14,7 +16,7 @@ Built at Cal Hacks 13.0 (Oct 23–25, 2026) with **Claude**, **SpacetimeDB** and
 4. For each confirmed hazard, in parallel:
    - **Health agent** (`agents/health/`) gives health risks, cited to CDC, EPA and CDPH pages that Apify crawled into SpacetimeDB.
    - **Legal agent** (`agents/legal/`) gives landlord duties, tenant options and local legal aid, cited to a statute pack in `data/packs/`.
-5. **Property agent** (`agents/property/`) runs once per address. It finds the building's owner or managing company, its contact details, code violations, permits and inspections, using Apify and open-data portals.
+5. **Property agent** (`agents/property/`) runs once per address. It finds the building's owner or managing company, its contact details, code violations, permits and inspections, using Apify and open-data portals. A complaint on file is not a finding, and the building's record is never treated as the landlord's personal history.
 6. **The app** (`web/` + `tenant/`) shows the 3D home, the cited health and legal information, and the next steps:
    - a formal notice to the landlord, sent from the tenant's Gmail;
    - the landlord's replies, read back from Gmail;
@@ -27,7 +29,7 @@ There are two ways the agents run:
 - **The app's live mode** (`HOME_LIVE=1`): the tenant API runs the agents in its own process and keeps the results in memory.
 - **The orchestrator** (`integration/orchestrator.py`): it watches SpacetimeDB for confirmed hazards and runs the agents. Each agent records its run in the `agent_run` table as running, then done or failed.
 
-The app doesn't talk to SpacetimeDB yet.
+The browser never talks to SpacetimeDB directly. With `HOME_LIVE_SAVE=1`, as on the deployed site, the API writes every run to SpacetimeDB through the same reducers the orchestrator uses. Use one runner per case, not both, or every run happens twice.
 
 ## Repo layout
 
@@ -55,7 +57,7 @@ python3 -m venv data/.venv
 ```
 
 ```bash
-data/.venv/bin/pip install -r tenant/requirements.txt Pillow
+data/.venv/bin/pip install -r requirements.txt
 ```
 
 ```bash
@@ -72,6 +74,7 @@ Open http://127.0.0.1:5173. The API runs on http://127.0.0.1:8787, and Vite forw
 
 This is **fixture mode**, the default:
 - With no Google client configured, "Continue with Google" starts a local demo session.
+- Each demo sign-in is its own private case, and signing out deletes it.
 - Rooms and hazards come from the saved walkthrough in `tenant/fixture.py`.
 - Nothing calls Claude, Apify, Gmail or the database.
 
@@ -91,9 +94,9 @@ What runs, and when:
 Results stay in the API's memory. `HOME_LIVE_SAVE=1` also saves them to SpacetimeDB. **This spends Claude and Apify credits.**
 
 **Sign-in and Gmail.** For real Google sign-in, set `GOOGLE_CLIENT_ID` in the repo-root `.env` and `VITE_GOOGLE_CLIENT_ID` in `web/.env.local`.
-- Signing in also asks for Gmail access: `gmail.send` to send the notice, and `gmail.readonly` to read the landlord's replies. If that access is missing, the app asks again on Send.
+- **Continue with Google** also asks for Gmail access: `gmail.send` to send the notice, and `gmail.readonly` to read the landlord's replies. **Sign in with email** signs in with the Google account only and asks for Gmail later, on Send.
 - Once the notice is sent, the app checks Gmail for replies from the landlord every 30 seconds and updates the next steps.
-- Sending needs a Google client. Without one, as in the demo, Send shows an error.
+- Without Gmail access (demo tenant, no Google client, or a refused consent), Send opens the same notice in the tenant's mail app.
 - `HOME_DEV_LOGIN=1` keeps the demo session available, and `HOME_DEV_LOGIN=0` hides it.
 
 **Nearby clinics.** With no saved results, the clinics screen shows the HRSA health-center search link. To look clinics up live, either run the lookup for one ZIP, or start the API with `HOME_CLINICS_LIVE=1`:
@@ -119,10 +122,10 @@ data/.venv/bin/pip install -r agents/legal/requirements.txt -r agents/property/r
 ```
 
 ```bash
-brew install ffmpeg
+brew install ffmpeg poppler
 ```
 
-ffmpeg and Pillow are for the vision agent. yt-dlp is only needed to download the demo video for the vision evals.
+ffmpeg and Pillow are for the vision agent, and poppler (`pdftoppm`) is for floor-plan PDFs in the plan agent. yt-dlp is only needed to download the demo video for the vision evals.
 
 ### 2. Configure `.env`
 
@@ -244,12 +247,12 @@ None of the tests call an API or need keys. Run them from the repo root. Each fo
 
 | Command | Tests |
 |---|---|
-| `data/.venv/bin/python -m pytest agents/legal -q` | 57 |
+| `data/.venv/bin/python -m pytest agents/legal -q` | 59 |
 | `data/.venv/bin/python -m pytest agents/property -q` | 40 |
-| `data/.venv/bin/python -m pytest agents/plan -q` | 8 |
+| `data/.venv/bin/python -m pytest agents/plan -q` | 10 |
 | `data/.venv/bin/python -m pytest agents/health -q` | 5 |
 | `data/.venv/bin/python -m pytest agents/vision/tests -q` | 79 |
-| `data/.venv/bin/python -m pytest tenant/tests -q` | 57 |
+| `data/.venv/bin/python -m pytest tenant/tests -q` | 63 |
 | `data/.venv/bin/python agents/vision/evals.py` | 6 vision evals, replayed from fixtures for $0 |
 | `cd web && npm run build` | Typecheck and build the app |
 | `bash data/test_core.sh http://127.0.0.1:3000 home` | 11 checks of the database reducers (writes a `case_core_test` case) |
@@ -277,6 +280,15 @@ Measured so far (details in `docs/stack-findings.md`):
 - the health agent takes about 9–13 s per hazard;
 - the legal agent takes about 10 s per hazard in pack-only mode.
 
+## Deploy
+
+The live site runs on Railway as one service, built from `Dockerfile` and `railway.json`.
+- The image builds `web/dist`, installs the root `requirements.txt` plus ffmpeg and poppler, and starts `python -m tenant.server`, which serves the app and the API. It binds `0.0.0.0` on Railway's `PORT`.
+- Environment: `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, `STDB_URL`, `GOOGLE_CLIENT_ID`, `HOME_LIVE=1`, `HOME_LIVE_SAVE=1`, `HOME_DEV_LOGIN=1`. `VITE_GOOGLE_CLIENT_ID` is a build argument.
+- Every push to `main` redeploys. Cases and uploads live in memory, so a redeploy clears them.
+- The orchestrator does not run in production. The API runs the agents itself when a hazard is confirmed.
+- The domain is `www.goldilocks.casa`. It is listed in the Google OAuth client's JavaScript origins and redirect URIs.
+
 ## Legal coverage
 
 - **`data/packs/ca_oakland.json`:** Oakland, CA.
@@ -284,3 +296,8 @@ Measured so far (details in `docs/stack-findings.md`):
 - **Other places:** with no pack for the area, the legal agent reports the hazard as "not verified for your area" instead of guessing.
 
 Everything the app shows is general information, not legal or medical advice.
+
+## Credits
+
+- The vision evals use a third-party apartment walkthrough from YouTube (https://www.youtube.com/watch?v=wFxmYq9wCWM). It belongs to its creator, is downloaded locally with yt-dlp, and is not stored in this repo.
+- Logos in the architecture diagram belong to their owners.
