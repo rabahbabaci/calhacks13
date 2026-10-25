@@ -1,7 +1,7 @@
 # Contracts
 
-Shared data shapes for the stack. Sections 1 to 3 are proposals for the whole team; Divit has the final say. Sections 4 and 5 cover Rab's health agent and the shared SpacetimeDB module.
-To add your agent's tables or output shape, send them to Rab and they get added here, so the module stays in one place.
+Shared data shapes for the stack. Sections 1 to 3 are proposals for the whole team; Divit has the final say. Sections 4 and 5 cover Rabah's health agent and the shared SpacetimeDB module.
+To add your agent's tables or output shape, send them to Rabah and they get added here, so the module stays in one place.
 
 Last updated: Sat Oct 24, 6:10 PM PT
 
@@ -128,7 +128,7 @@ UI subscriptions:
 
 Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_json`. Agents only need two calls: `start_run` when they begin, `finish_run` or `fail_run` when they end.
 
-## 7. Legal agent (proposed on the `legal-agent` branch, for Rab to review)
+## 7. Legal agent
 
 `agents/legal/agent.py`. Same input as the health agent (section 3) and the same confidence rule: hazards below 0.5 that the tenant hasn't confirmed go to `not_assessed`.
 
