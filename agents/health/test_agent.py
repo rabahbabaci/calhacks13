@@ -33,6 +33,16 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(len(out["precautions"]), 1)
         self.assertEqual(dropped, [{"hazard": "dampness_mold", "field": "precautions", "text": "none", "reason": "claim is not an object"}])
 
+    def test_never_say_mold_as_finding(self):
+        for text in ["This is mold on the ceiling.", "It is black mold.", "You have mold in the bathroom."]:
+            _, dropped = run(health_risks=[{"text": text, "chunk_ids": [1]}])
+            self.assertEqual(dropped[0]["reason"], "never_say: mold stated as a finding", text)
+
+    def test_never_say_symptom_attribution(self):
+        for text in ["Your child's cough is likely from the dampness.", "Your cough may improve.", "The headache is probably caused by this."]:
+            _, dropped = run(health_risks=[{"text": text, "chunk_ids": [1]}])
+            self.assertEqual(dropped[0]["reason"], "never_say: symptom attributed to this hazard", text)
+
     def test_general_claims_about_children_are_kept(self):
         out, dropped = run(vulnerable_groups=[{"text": "Children and people with asthma are more sensitive to damp indoor air.", "chunk_ids": [1]}])
         self.assertEqual((len(out["vulnerable_groups"]), dropped), (1, []))

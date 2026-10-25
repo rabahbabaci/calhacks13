@@ -13,6 +13,7 @@ Output: {"case_id", "assessments": [section 5 objects], "not_assessed": [{"hazar
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -30,6 +31,13 @@ MIN_CONFIDENCE = 0.5
 MAX_TURNS = 6
 CLAIM_FIELDS = ["exposure_pathways", "health_risks", "vulnerable_groups", "precautions", "see_a_doctor_if"]
 BANNED_TERMS = {"rodents": ["hantavirus"]}
+# Wording rules enforced in code, not just in the prompt. The mold pattern is the one in
+# agents/legal/validate.py NEVER_SAY; the symptom patterns are the ones evals.py eval_b checks.
+NEVER_SAY = [
+    (re.compile(r"\b(this|it) is (black |toxic )?mold\b|\bconfirmed mold\b|\byou have mold\b", re.I), "mold stated as a finding"),
+    (re.compile(r"\b(your|the|his|her) (kid|child|son|daughter)\b|(kid|child)'?s cough|\byour cough\b|\bis (likely|probably) (from|caused by)\b", re.I),
+     "symptom attributed to this hazard"),
+]
 
 
 def load_env():
@@ -133,6 +141,8 @@ def validate(hazard, draft, chunks, sources):
                 reason = f"chunk_ids not retrieved: {sorted(set(ids) - valid_ids)}"
             elif any(b in text.lower() for b in banned):
                 reason = "banned term for this hazard"
+            else:
+                reason = next((f"never_say: {why}" for pattern, why in NEVER_SAY if pattern.search(text)), None)
             if reason:
                 dropped.append({"hazard": hazard, "field": field, "text": text, "reason": reason})
                 continue
