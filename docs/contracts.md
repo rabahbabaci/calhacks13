@@ -132,6 +132,8 @@ Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_
 
 `agents/legal/agent.py`. Same input as the health agent (section 3) and the same confidence rule: hazards below 0.5 that the tenant hasn't confirmed go to `not_assessed`.
 
+**Any US address.** If the case's `jurisdiction` lacks a state or city, the agent fills it (and the county) from the Census geocoder (`data/geocode.py`). Pack lookup is a city pack, else a state-wide pack (`"city": ""`), else none. Without a pack the agent researches the state's landlord-tenant statute and the local housing code itself, and gets the state's CourtListener court id. Sources it verified in earlier cases in the same state are read back from `legal_source` and offered as `L#` ids (state statutes, regulations and cases from anywhere in the state; ordinances and agency pages only for the same city).
+
 **Runs.** One `agent_run` row per hazard with agent `legal`: `start_run(case_id, "legal", hazard)` when it begins, then `finish_run` with the object below as `payload_json`, or `fail_run` with the error. If the case isn't in `case_file` yet, the agent creates it from its input with `create_case`.
 
 **Sources**, in order of trust: the verified jurisdiction pack in `data/packs/` (ids `P#` for the hazard's citations, `P0` for the pack's summary of that hazard, `G#` general rules, `C#` city procedures), then pages the agent read through Apify's RAG Web Browser or CourtListener (`R#`). A researched source is only kept if its excerpt is found on the page the agent actually read.
@@ -170,3 +172,56 @@ Rules, enforced in `agents/legal/validate.py`. Tests for the validator and the a
 The CLI also prints a wrapper per case: `{case_id, pack_id, assessments, not_assessed, legal_aid, failed, dropped, usage}`. Show `assessments` and the pack's `legal_aid` list to the tenant, and `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal.
 
 **Env vars** (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.
+
+## 8. Property agent
+
+`agents/property/agent.py`. The public history of a building from its address alone, for any US address. It doesn't use hazards. Input is a case object (section 3; only `case_id` and `address` are read), or `--address "..."` on the command line.
+
+**Run.** One `agent_run` row: agent `property`, hazard `""`. `start_run`, then `finish_run` with the report below, or `fail_run`. It creates the case with `create_case` if it isn't there yet. No new tables.
+
+**Sources.** Which ones exist depends on the city, so the agent finds them itself and starts from verified hints where there are some (`agents/property/known.py`: NYC, Chicago, Oakland, Cincinnati).
+
+| Source | What it gives | Coverage |
+|---|---|---|
+| Census Geocoder (`data/geocode.py`) | Normalized address, city, county, state, ZIP | Every US address |
+| HUD Multifamily Properties - Assisted (ArcGIS) | Federal inspection score and date, troubled status, management company and contact | HUD-assisted buildings nationwide |
+| Socrata catalog + SoQL | Code violations, complaints, 311 requests | Hundreds of city and county portals |
+| ArcGIS Online search + layer query | Parcels: APN, owner name or mailing address; some cities' code cases | Most counties |
+| Accela Citizen Access (Apify Playwright) | Code-enforcement cases and permits by address | Cities on Accela, e.g. `OAKLAND` |
+| Apify RAG Web Browser | City lookups, assessor pages, local news | Anywhere |
+| CourtListener | Lawsuits naming the owner or building | Federal and state courts |
+
+Not covered: owner names where the county doesn't publish them (California parcels give a mailing address only). Paid parcel APIs (Regrid, ATTOM) would fill that gap.
+
+**payload_json:**
+
+```json
+{
+  "address": "1510 Webster St, Oakland, CA 94612",
+  "matched_address": "1510 WEBSTER ST, OAKLAND, CA, 94612",
+  "jurisdiction": {"city": "Oakland", "county": "Alameda County", "state": "CA", "zip": "94612"},
+  "owner": {"name": "...", "role": "owner", "mailing_address": "...", "data_id": "D4"},
+  "manager": null,
+  "records": [{"id": "R1", "kind": "violation", "title": "...", "date": "2026-09-24", "status": "open", "detail": "...", "ref": "2606350", "data_id": "D3"}],
+  "patterns": [{"text": "...", "record_ids": ["R1", "R4"]}],
+  "unresolved": [{"text": "...", "record_ids": ["R2"]}],
+  "summary": "At most 3 plain sentences.",
+  "coverage": [{"source": "OAK311 service requests", "result": "6 code enforcement requests since 2024"}],
+  "disclaimer": "Compiled from public records, which can be incomplete, ..."
+}
+```
+
+`kind` is one of ownership, violation, complaint, inspection, permit, enforcement, litigation, news, other.
+
+Rules, enforced in `agents/property/validate.py`:
+- Every fetched result gets a data id (`D#`). A record is kept only if it cites one and that result's raw text contains the record's `ref` or its date (ISO, US style or ArcGIS epoch milliseconds).
+- Findings (`patterns`, `unresolved`) must cite kept records.
+- The report is about real people and companies, so findings or a summary that accuse anyone ("illegal", "negligent", "slumlord", "bad faith", ...) are dropped.
+- `owner` and `manager` are kept only if the name appears in the data they cite.
+- Queries go only to public https hostnames: Socrata dataset ids and ArcGIS layer paths are checked, and IP addresses and localhost are refused.
+
+The CLI prints `{case_id, report, dropped, usage}`. Show `report` to the tenant; `dropped` and `usage` are internal.
+
+**Env vars** (repo-root `.env`, see `agents/property/.env.example`): `ANTHROPIC_API_KEY_Property`, `APIFY_TOKEN_Property`, optional `COURTLISTENER_TOKEN_Property`, `SOCRATA_APP_TOKEN_Property` (higher rate limits), and `STDB_URL_Property`, `STDB_DB_Property`, `STDB_TOKEN_Property` overrides.
+
+Tests: `data/.venv/bin/python -m unittest discover -s agents/property -p "test_*.py"` (offline).
