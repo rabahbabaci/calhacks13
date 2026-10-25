@@ -128,6 +128,34 @@ const agent_run = table(
   }
 );
 
+// Legal agent (agents/legal): every law, ordinance, opinion or page it cited,
+// shared across cases. Its per-hazard output goes in agent_run like every
+// other agent. See docs/contracts.md section 7.
+const LEGAL_SOURCE_KINDS = new Set([
+  'statute',
+  'ordinance',
+  'regulation',
+  'case_law',
+  'settlement',
+  'agency',
+  'legal_aid',
+  'other',
+]);
+
+const legal_source = table(
+  { name: 'legal_source', public: true },
+  {
+    key: t.string().primaryKey(),
+    url: t.string(),
+    cite: t.string(),
+    kind: t.string(),
+    jurisdiction: t.string(),
+    excerpt: t.string(),
+    verified: t.bool(),
+    fetched_at: t.timestamp(),
+  }
+);
+
 const spacetimedb = schema({
   health_source,
   health_chunk,
@@ -135,6 +163,7 @@ const spacetimedb = schema({
   case_file,
   hazard: hazard_row,
   agent_run,
+  legal_source,
 });
 export default spacetimedb;
 
@@ -304,5 +333,31 @@ export const fail_run = spacetimedb.reducer(
     if (run.status !== 'running') throw new SenderError(`run is ${run.status}, not running`);
     if (error.trim().length === 0) throw new SenderError('empty error');
     ctx.db.agent_run.id.update({ ...run, status: 'failed', error, updated_at: ctx.timestamp });
+  }
+);
+
+// ---------- legal reducers ----------
+
+export const add_legal_source = spacetimedb.reducer(
+  {
+    url: t.string(),
+    cite: t.string(),
+    kind: t.string(),
+    jurisdiction: t.string(),
+    excerpt: t.string(),
+    verified: t.bool(),
+  },
+  (ctx, { url, cite, kind, jurisdiction, excerpt, verified }) => {
+    if (!url.startsWith('https://')) throw new SenderError(`url must be https: ${url}`);
+    if (!LEGAL_SOURCE_KINDS.has(kind)) throw new SenderError(`unknown source kind: ${kind}`);
+    if (cite.trim().length === 0) throw new SenderError('empty cite');
+    // One row per citation: several sections of one statute can share a url.
+    const key = `${cite} | ${url}`;
+    const row = { key, url, cite, kind, jurisdiction, excerpt, verified, fetched_at: ctx.timestamp };
+    if (ctx.db.legal_source.key.find(key)) {
+      ctx.db.legal_source.key.update(row);
+    } else {
+      ctx.db.legal_source.insert(row);
+    }
   }
 );

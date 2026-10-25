@@ -127,3 +127,46 @@ UI subscriptions:
 - `SELECT * FROM agent_run WHERE case_id = '<id>'`
 
 Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_json`. Agents only need two calls: `start_run` when they begin, `finish_run` or `fail_run` when they end.
+
+## 7. Legal agent (proposed on the `legal-agent` branch, for Rab to review)
+
+`agents/legal/agent.py`. Same input as the health agent (section 3) and the same confidence rule: hazards below 0.5 that the tenant hasn't confirmed go to `not_assessed`.
+
+**Runs.** One `agent_run` row per hazard with agent `legal`: `start_run(case_id, "legal", hazard)` when it begins, then `finish_run` with the object below as `payload_json`, or `fail_run` with the error. If the case isn't in `case_file` yet, the agent creates it from its input with `create_case`.
+
+**Sources**, in order of trust: the verified jurisdiction pack in `data/packs/` (ids `P#` for the hazard's citations, `P0` for the pack's summary of that hazard, `G#` general rules, `C#` city procedures), then pages the agent read through Apify's RAG Web Browser or CourtListener (`R#`). A researched source is only kept if its excerpt is found on the page the agent actually read.
+
+**legal_source** (new table, the only module change): key (string, primary key, `"<cite> | <url>"`), url, cite, kind (statute|ordinance|regulation|case_law|settlement|agency|legal_aid|other), jurisdiction, excerpt, verified (bool: true for jurisdiction-pack sources), fetched_at (timestamp). Every source cited in a finished run is upserted here, so the UI can show the laws and pages behind a case and other agents can reuse them.
+
+- `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)`: upserts by cite + url, since several sections of one statute share a url. Rejects non-https urls, unknown kinds and an empty cite.
+
+**payload_json**, one object per hazard:
+
+```json
+{
+  "hazard": "dampness_mold",
+  "urgent": false,
+  "urgent_message": null,
+  "jurisdiction": {"state": "CA", "city": "Oakland"},
+  "landlord_duty": [{"text": "...", "source_ids": ["P1", "P0"]}],
+  "tenant_options": [{"text": "...", "source_ids": ["P0", "C1"]}],
+  "deadlines": [{"text": "...", "source_ids": ["G2"]}],
+  "ask_legal_aid": [{"text": "...", "source_ids": ["G2"]}],
+  "similar_cases": [{"text": "...", "source_ids": ["R2"]}],
+  "cautions": ["A photo or AI label is never an officer's determination"],
+  "sources": [{"id": "P1", "cite": "Cal. Health & Safety Code 17920.3(a)(11)", "url": "https://...", "kind": "statute", "verified": true}],
+  "disclaimer": "General legal information, not legal advice. ..."
+}
+```
+
+Rules, enforced in `agents/legal/validate.py`. Tests for the validator and the agent run offline, with no keys or database: `data/.venv/bin/python -m unittest discover -s agents/legal -p "test_*.py"`.
+- Every claim cites known source ids or gets dropped.
+- The pack's `never_say` list is enforced: no rent withholding advice, no promised outcome or money (amounts only inside `similar_cases`), no "court-ready", nothing stated as "mold".
+- A number of days in a claim must appear in one of its cited sources.
+- `similar_cases` must cite a court opinion or settlement.
+- A tenant option that rests on a pack rule marked `legal_aid_question` or `eligibility_check_needed` is moved to `ask_legal_aid`.
+- `urgent` and `urgent_message` reuse `agents/health/urgent.py`, so the safety message is identical across agents.
+
+The CLI also prints a wrapper per case: `{case_id, pack_id, assessments, not_assessed, legal_aid, failed, dropped, usage}`. Show `assessments` and the pack's `legal_aid` list to the tenant, and `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal.
+
+**Env vars** (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.
