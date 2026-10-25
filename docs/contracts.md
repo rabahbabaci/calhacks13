@@ -1,9 +1,9 @@
 # Contracts
 
-Shared data shapes for the stack. Sections 1 to 3 are proposals for the whole team; Divit has the final say. Sections 4 and 5 cover Rab's health agent and the shared SpacetimeDB module. Sections 6 and 7 cover the legal agent (proposed on the `legal-agent` branch).
+Shared data shapes for the stack. Sections 1 to 3 are proposals for the whole team; Divit has the final say. Sections 4 and 5 cover Rab's health agent and the shared SpacetimeDB module.
 To add your agent's tables or output shape, send them to Rab and they get added here, so the module stays in one place.
 
-Last updated: Sat Oct 24, 9:10 AM PT
+Last updated: Sat Oct 24, 6:10 PM PT
 
 ## 1. Hazard tags (proposed)
 
@@ -47,6 +47,8 @@ Tags are internal. User-facing labels never say "mold" as a finding; use "visibl
 `notes` is optional. Agents may read it for context but never treat it as a finding or connect it to a hazard.
 
 ## 4. SpacetimeDB module `home`
+
+**Shared db:** `https://maincloud.spacetimedb.com`, database `home`. No `Authorization` header needed for SQL reads or reducer calls on these public tables. Setup, Python and curl examples: `docs/stack-findings.md`, "How to connect".
 
 All tables public. Writes go through reducers only. Reads use SQL over HTTP.
 
@@ -100,25 +102,45 @@ The agent returns one wrapper per case:
 
 For downstream agents and the packet: show `assessments` to the tenant. List `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal and never shown to the tenant.
 
-## 6. Legal tables in module `home` (proposed, for Rab to review)
+## 6. Shared case, hazard and agent run tables
 
-Added on the `legal-agent` branch. Same conventions as section 4: public tables, writes through reducers, reads over SQL.
+The live core of the app. Every agent writes here, and the UI subscribes so the pipeline fills in on screen as agents finish. (`case` is a SQL keyword, so the table is `case_file`.)
 
-**legal_source**: key (string, primary key, `"<cite> | <url>"`), url, cite, kind (statute|ordinance|regulation|case_law|settlement|agency|legal_aid|other), jurisdiction, excerpt, verified (bool: true for jurisdiction-pack sources), fetched_at (timestamp)
+**case_file**: case_id (string, primary key), address (string), payload_json (string, the section 3 case input), created_at (timestamp)
 
-**legal_assessment**: id (u32 autoInc primary key), case_id, hazard, payload_json (string, section 7 object), created_at (timestamp)
+**hazard**: id (u32 autoInc primary key), case_id, hazard (tag from section 1), location (string), confidence (f32), confirmed_by_tenant (bool), evidence_ids_json (string), created_at (timestamp)
 
-Reducers:
-- `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)`: upserts by cite + url, since several sections of one statute share a url. Rejects non-https urls, unknown kinds, empty cite.
-- `save_legal_assessment(case_id, hazard, payload_json)`: same checks as `save_assessment` (known hazard tag, non-empty case_id, valid JSON).
+**agent_run**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action`), hazard (tag, or "" for case-level agents), status (`pending` | `running` | `done` | `failed`), payload_json (string, that agent's own output shape, "" until done), error (string, "" unless failed), updated_at (timestamp). One row per (case_id, agent, hazard), updated in place.
 
-## 7. Legal agent output
+Reducers (the module enforces the rules):
+- `create_case(case_id, address, payload_json)`: upsert
+- `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)`: case must exist, tag must be valid
+- `confirm_hazard(id, confirmed)`: the tenant's yes/no from the UI
+- `start_run(case_id, agent, hazard)`: creates the row or resets it to `running`
+- `finish_run(case_id, agent, hazard, payload_json)`: `running` to `done`
+- `fail_run(case_id, agent, hazard, error)`: `running` to `failed`
+
+Rejected with an error: unknown agent or hazard tag, unknown case, finishing a run that isn't `running`.
+
+UI subscriptions:
+- `SELECT * FROM hazard WHERE case_id = '<id>'`
+- `SELECT * FROM agent_run WHERE case_id = '<id>'`
+
+Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_json`. Agents only need two calls: `start_run` when they begin, `finish_run` or `fail_run` when they end.
+
+## 7. Legal agent (proposed on the `legal-agent` branch, for Rab to review)
 
 `agents/legal/agent.py`. Same input as the health agent (section 3) and the same confidence rule: hazards below 0.5 that the tenant hasn't confirmed go to `not_assessed`.
 
-Sources are, in order of trust: the verified jurisdiction pack in `data/packs/` (ids `P#` for the hazard's citations, `P0` for the pack's summary of that hazard, `G#` general rules, `C#` city procedures), then pages the agent read through Apify's RAG Web Browser or CourtListener (`R#`). A researched source is only saved if its excerpt is found in the page the agent actually read.
+**Runs.** One `agent_run` row per hazard with agent `legal`: `start_run(case_id, "legal", hazard)` when it begins, then `finish_run` with the object below as `payload_json`, or `fail_run` with the error. If the case isn't in `case_file` yet, the agent creates it from its input with `create_case`.
 
-One object per hazard:
+**Sources**, in order of trust: the verified jurisdiction pack in `data/packs/` (ids `P#` for the hazard's citations, `P0` for the pack's summary of that hazard, `G#` general rules, `C#` city procedures), then pages the agent read through Apify's RAG Web Browser or CourtListener (`R#`). A researched source is only kept if its excerpt is found on the page the agent actually read.
+
+**legal_source** (new table, the only module change): key (string, primary key, `"<cite> | <url>"`), url, cite, kind (statute|ordinance|regulation|case_law|settlement|agency|legal_aid|other), jurisdiction, excerpt, verified (bool: true for jurisdiction-pack sources), fetched_at (timestamp). Every source cited in a finished run is upserted here, so the UI can show the laws and pages behind a case and other agents can reuse them.
+
+- `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)`: upserts by cite + url, since several sections of one statute share a url. Rejects non-https urls, unknown kinds and an empty cite.
+
+**payload_json**, one object per hazard:
 
 ```json
 {
@@ -137,7 +159,7 @@ One object per hazard:
 }
 ```
 
-Rules, enforced in `agents/legal/validate.py` (tests: `data/.venv/bin/python -m unittest agents/legal/test_validate.py`):
+Rules, enforced in `agents/legal/validate.py`. Tests for the validator and the agent run offline, with no keys or database: `data/.venv/bin/python -m unittest discover -s agents/legal -p "test_*.py"`.
 - Every claim cites known source ids or gets dropped.
 - The pack's `never_say` list is enforced: no rent withholding advice, no promised outcome or money (amounts only inside `similar_cases`), no "court-ready", nothing stated as "mold".
 - A number of days in a claim must appear in one of its cited sources.
@@ -145,20 +167,6 @@ Rules, enforced in `agents/legal/validate.py` (tests: `data/.venv/bin/python -m 
 - A tenant option that rests on a pack rule marked `legal_aid_question` or `eligibility_check_needed` is moved to `ask_legal_aid`.
 - `urgent` and `urgent_message` reuse `agents/health/urgent.py`, so the safety message is identical across agents.
 
-The agent returns one wrapper per case:
+The CLI also prints a wrapper per case: `{case_id, pack_id, assessments, not_assessed, legal_aid, failed, dropped, usage}`. Show `assessments` and the pack's `legal_aid` list to the tenant, and `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal.
 
-```json
-{
-  "case_id": "case_001",
-  "pack_id": "ca-oakland",
-  "assessments": [ /* section 7 objects */ ],
-  "not_assessed": [{"hazard": "rodents", "reason": "low confidence and not confirmed by tenant"}],
-  "legal_aid": [ /* the pack's legal_aid list, unchanged */ ],
-  "dropped": [ /* claims removed by the validator, for audit only */ ],
-  "usage": [ /* token counts and timing per hazard */ ]
-}
-```
-
-Show `assessments` and `legal_aid` to the tenant, and list `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal.
-
-Env vars for the legal agent (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.
+**Env vars** (repo-root `.env`, see `agents/legal/.env.example`): `ANTHROPIC_API_KEY_Legal`, `APIFY_TOKEN_Legal`, optional `COURTLISTENER_TOKEN_Legal`. Optional `STDB_URL_Legal`, `STDB_DB_Legal`, `STDB_TOKEN_Legal` override the shared `STDB_*` settings for the legal agent only.

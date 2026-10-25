@@ -5,7 +5,9 @@ Usage (repo root):
   data/.venv/bin/python agents/legal/agent.py agents/legal/cases/mold_oakland.json --no-save
 
 Input: case object per docs/contracts.md section 3 (optional "notes" string).
-Output: docs/contracts.md section 7.
+Output: docs/contracts.md section 7. With saving on, each hazard is one agent_run row
+(agent "legal"): start_run when it begins, finish_run with the section 7 object, or fail_run.
+Cited sources also go to the shared legal_source table.
 
 Sources, in order of trust:
   1. The verified jurisdiction pack in data/packs/ (P#, G#, C# ids).
@@ -49,11 +51,11 @@ sys.path.insert(0, str(ROOT / "agents" / "health"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from research import Research, format_pages  # noqa: E402
-from stdb import StdbError, call_reducer  # noqa: E402
+from stdb import StdbError, call_reducer, sql  # noqa: E402
 from urgent import URGENT  # noqa: E402
 from validate import CLAIM_FIELDS, validate  # noqa: E402
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-sonnet-5-5"
 MIN_CONFIDENCE = 0.5
 MAX_TURNS = 24
 RESEARCH_BUDGET = 6  # searches + page reads + opinion searches per hazard
@@ -326,59 +328,96 @@ def assess_case(case, save=True, client=None, research=None):
         "assessments": [],
         "not_assessed": [],
         "legal_aid": (pack or {}).get("legal_aid", []),
+        "failed": [],
         "dropped": [],
         "usage": [],
+        "_sources": {},
     }
+    if save:
+        ensure_case(case)
+    to_assess = [h for h in case.get("hazards", []) if float(h.get("confidence", 0)) >= MIN_CONFIDENCE or h.get("confirmed_by_tenant")]
+    if to_assess and client is None:
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=env("ANTHROPIC_API_KEY_Legal"))
+    if to_assess and research is None:
+        research = Research(env("APIFY_TOKEN_Legal"), env("COURTLISTENER_TOKEN_Legal", required=False))
     for h in case.get("hazards", []):
         hazard = h["hazard"]
         if float(h.get("confidence", 0)) < MIN_CONFIDENCE and not h.get("confirmed_by_tenant"):
             result["not_assessed"].append({"hazard": hazard, "reason": "low confidence and not confirmed by tenant"})
             continue
-        t0 = time.time()
-        if client is None:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=env("ANTHROPIC_API_KEY_Legal"))
-        if research is None:
-            research = Research(env("APIFY_TOKEN_Legal"), env("COURTLISTENER_TOKEN_Legal", required=False))
-        sources, law = pack_sources(pack, hazard)
-        draft, usage = run_llm(client, research, case, h, pack, sources, law)
-        fields, cited, dropped = validate(hazard, draft, sources)
-        result["dropped"].extend(dropped)
-        assessment = {
-            "hazard": hazard,
-            "urgent": hazard in URGENT,
-            "urgent_message": URGENT.get(hazard),
-            "jurisdiction": case.get("jurisdiction"),
-            **fields,
-            "cautions": (law or {}).get("cautions", []),
-            "sources": [
-                {"id": i, "cite": sources[i]["cite"], "url": sources[i]["url"], "kind": sources[i]["kind"], "verified": sources[i]["verified"]}
-                for i in cited
-            ],
-            "disclaimer": (pack or {}).get("disclaimer", DEFAULT_DISCLAIMER),
-        }
-        usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2), "pages_read_total": len(research.pages)})
-        result["usage"].append(usage)
         if save:
-            save_assessment(case, assessment, sources)
+            stdb_call("start_run", [case["case_id"], "legal", hazard])
+        try:
+            assessment = assess_hazard(case, h, pack, result, client, research)
+        except Exception as e:
+            if save:
+                stdb_call("fail_run", [case["case_id"], "legal", hazard, str(e)[:500]])
+            result["failed"].append({"hazard": hazard, "error": str(e)})
+            continue
+        if save:
+            save_run(case, assessment, result["_sources"][hazard])
         result["assessments"].append(assessment)
+    result.pop("_sources")
     return result
 
 
-def save_assessment(case, assessment, sources):
-    where = ", ".join(x for x in [(case.get("jurisdiction") or {}).get("city"), (case.get("jurisdiction") or {}).get("state")] if x)
+def assess_hazard(case, h, pack, result, client, research):
+    """Research, draft and validate one hazard. Returns the section 7 object."""
+    hazard = h["hazard"]
+    t0 = time.time()
+    sources, law = pack_sources(pack, hazard)
+    draft, usage = run_llm(client, research, case, h, pack, sources, law)
+    fields, cited, dropped = validate(hazard, draft, sources)
+    result["dropped"].extend(dropped)
+    assessment = {
+        "hazard": hazard,
+        "urgent": hazard in URGENT,
+        "urgent_message": URGENT.get(hazard),
+        "jurisdiction": case.get("jurisdiction"),
+        **fields,
+        "cautions": (law or {}).get("cautions", []),
+        "sources": [
+            {"id": i, "cite": sources[i]["cite"], "url": sources[i]["url"], "kind": sources[i]["kind"], "verified": sources[i]["verified"]}
+            for i in cited
+        ],
+        "disclaimer": (pack or {}).get("disclaimer", DEFAULT_DISCLAIMER),
+    }
+    usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2), "pages_read_total": len(research.pages)})
+    result["usage"].append(usage)
+    result["_sources"][hazard] = sources
+    return assessment
+
+
+def stdb_call(reducer, args):
     try:
-        for s in assessment["sources"]:
-            full = sources[s["id"]]
-            if not full["url"]:
-                continue
-            call_reducer("add_legal_source", [full["url"], full["cite"], full["kind"], full.get("jurisdiction", where), full["text"], bool(full["verified"])])
-        call_reducer("save_legal_assessment", [case["case_id"], assessment["hazard"], json.dumps(assessment)])
+        call_reducer(reducer, args)
     except urllib.error.URLError as e:
         raise RuntimeError(f"SpacetimeDB unreachable: {e.reason}") from None
     except StdbError as e:
-        raise RuntimeError(f"save rejected for {assessment['hazard']}: {e}") from None
+        raise RuntimeError(f"{reducer} rejected: {e}") from None
+
+
+def ensure_case(case):
+    """agent_run rows need the case to exist; create it only if nobody has yet."""
+    case_id = case["case_id"].replace("'", "''")
+    try:
+        exists = sql(f"SELECT case_id FROM case_file WHERE case_id = '{case_id}'")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"SpacetimeDB unreachable: {e.reason}") from None
+    if not exists:
+        stdb_call("create_case", [case["case_id"], case.get("address", ""), json.dumps(case)])
+
+
+def save_run(case, assessment, sources):
+    """Add the cited sources to legal_source, then finish this hazard's run with the section 7 object."""
+    where = ", ".join(x for x in [(case.get("jurisdiction") or {}).get("city"), (case.get("jurisdiction") or {}).get("state")] if x)
+    for s in assessment["sources"]:
+        full = sources[s["id"]]
+        if full["url"]:
+            stdb_call("add_legal_source", [full["url"], full["cite"], full["kind"], full.get("jurisdiction", where), full["text"], bool(full["verified"])])
+    stdb_call("finish_run", [case["case_id"], "legal", assessment["hazard"], json.dumps(assessment)])
 
 
 if __name__ == "__main__":
