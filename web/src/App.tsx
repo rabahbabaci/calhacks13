@@ -1025,7 +1025,7 @@ export function App() {
   return (
     <div className="app">
       <header className="top">
-        <h1>Goldilocks</h1>
+        <h1><img className="top-logo" src="/logo.svg" alt="" width={32} height={32} />Goldilocks</h1>
         {signedIn && (
           <div className="top-actions">
             {hasCase && (
