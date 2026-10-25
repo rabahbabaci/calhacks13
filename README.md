@@ -1,4 +1,4 @@
-# Home
+# Goldilocks
 
 Help for renters living with unsafe housing. A tenant films a walkthrough of their home. Claude agents spot hazards like mold, leaks, pests, exposed wiring or missing heat. For each hazard the tenant confirms, the agents explain the health risk, the landlord's legal duty and the tenant's options, with a source cited for every claim. They also look up the building's public record (owner, code violations, permits, inspections).
 
@@ -21,7 +21,7 @@ Built at Cal Hacks 13.0 (Oct 23–25, 2026) with **Claude**, **SpacetimeDB** and
 
 | Path | What it is |
 |---|---|
-| `spacetimedb/` | SpacetimeDB 2.13 TypeScript module `home`: 7 tables and 10 reducers |
+| `spacetimedb/` | SpacetimeDB 2.13 TypeScript module `home` (the database keeps its original name): 7 tables and 10 reducers |
 | `data/` | `stdb.py` (Python client for SpacetimeDB), Apify health-source ingest, Census geocoder, legal packs (`data/packs/`) |
 | `agents/vision/` | Hazard detection from video or photos. Needs ffmpeg |
 | `agents/health/` | Health info per hazard |
