@@ -65,6 +65,13 @@ class AppState:
             user["case_id"] = ""
         return token, user
 
+    def sign_out(self, token):
+        """End a session. Each demo sign-in is a one-off user, so its case goes too."""
+        sub = self.sessions.pop(token or "", None)
+        if sub and sub.startswith("demo:"):
+            user = self.users.pop(sub, None) or {}
+            self.cases.pop(user.get("case_id") or "", None)
+
     def case_for(self, user):
         if not user or not user.get("case_id"):
             return None
@@ -259,7 +266,8 @@ def make_handler(state):
                 if not state.dev_login:
                     self._reply(404, {"error": "Demo sign-in is off."})
                     return
-                token, user = state.sign_in("demo", "demo@localhost", "Demo Tenant")
+                # A fresh id per sign-in, so two demo tenants never share a case.
+                token, user = state.sign_in("demo:" + secrets.token_hex(8), "demo@localhost", "Demo Tenant")
                 self._reply(200, {"ok": True, "name": user["name"]}, [self._cookie(token)])
                 return
             if path == "/api/auth/google":
@@ -279,7 +287,7 @@ def make_handler(state):
                 self._reply(200, {"ok": True, "name": user["name"]}, [self._cookie(token)])
                 return
             if path == "/api/auth/logout":
-                state.sessions.pop(self._token(), None)
+                state.sign_out(self._token())
                 self._reply(200, {"ok": True}, [self._cookie("", expire=True)])
                 return
             user, case = self._user_case()
@@ -435,7 +443,7 @@ def main():
     mode = "live mode: property on onboard, health and legal after confirm" if live_enabled() else "fixture mode, no Claude calls"
     sign_in = "Google sign-in on" if state.google_client_id else "Google sign-in off (no GOOGLE_CLIENT_ID)"
     site = "serving web/dist" if DIST.is_dir() else "API only (no web/dist build)"
-    print(f"Home API on http://{host}:{port} ({mode}, {site}). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
+    print(f"Goldilocks API on http://{host}:{port} ({mode}, {site}). {sign_in}, demo sign-in {'on' if state.dev_login else 'off'}")
     httpd.serve_forever()
 
 

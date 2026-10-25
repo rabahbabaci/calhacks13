@@ -179,7 +179,7 @@ def hrsa_directory(zip_code, timeout=30):
     """The same 5-mile list the HRSA ZIP search shows. No Apify and no Census geocoder."""
     zip_code = re.sub(r"\D", "", zip_code or "")[:5]
     if len(zip_code) != 5:
-        return {"clinics": [], "note": "No cited page listed a center name. Home does not invent clinic names."}
+        return {"clinics": [], "note": "No cited page listed a center name. Goldilocks does not invent clinic names."}
     if zip_code in _HRSA_CACHE:
         return _HRSA_CACHE[zip_code]
     try:
@@ -208,9 +208,9 @@ def hrsa_directory(zip_code, timeout=30):
             raise ValueError(data["error"])
         rows = _hrsa_rows_from_gis(data.get("features") or [], origin)
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-        return {"clinics": [], "note": "The HRSA ZIP search did not return a center list. Home does not invent clinic names."}
+        return {"clinics": [], "note": "The HRSA ZIP search did not return a center list. Goldilocks does not invent clinic names."}
     clinics = clinics_from_hrsa(rows, zip_code)
-    note = "" if clinics else "No cited page listed a center name. Home does not invent clinic names."
+    note = "" if clinics else "No cited page listed a center name. Goldilocks does not invent clinic names."
     if clinics:
         note = "These are the sites the HRSA ZIP search lists within 5 miles. That result does not list tests or insurance."
     out = {"clinics": clinics, "note": note}
@@ -750,7 +750,7 @@ def lookup(zip_code, see_a_doctor_if, directory=None, defects=None, specialists=
             break
     if not directory:
         clinics = []
-        note = "No clinic directory key is set. This opens the HRSA health-center search for your ZIP. Home does not invent clinic names."
+        note = "No clinic directory key is set. This opens the HRSA health-center search for your ZIP. Goldilocks does not invent clinic names."
         source = "hrsa_link"
     else:
         note = ""
@@ -1152,7 +1152,7 @@ def clinics_from_pages(pages):
                 "insurance": _plans(snippet),
             })
     clinics = parse_directory({"clinics": rows})
-    note = "" if clinics else "No cited page listed a center name. Home does not invent clinic names."
+    note = "" if clinics else "No cited page listed a center name. Goldilocks does not invent clinic names."
     return {"clinics": clinics, "note": note}
 
 
