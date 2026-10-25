@@ -102,16 +102,28 @@ The agent returns one wrapper per case:
 
 For downstream agents and the packet: show `assessments` to the tenant. List `not_assessed` as "not assessed, and why". `dropped` and `usage` are internal and never shown to the tenant.
 
-## 6. Shared case and agent output tables (PROPOSED, needs Divit's ok)
+## 6. Shared case, hazard and agent run tables
 
-Lets every agent write to the shared db without per-agent schemas, and lets the UI subscribe to one table for live updates.
+The live core of the app. Every agent writes here, and the UI subscribes so the pipeline fills in on screen as agents finish. (`case` is a SQL keyword, so the table is `case_file`.)
 
-**case_input**: case_id (string, primary key), payload_json (string, the section 3 case input), created_at (timestamp)
+**case_file**: case_id (string, primary key), address (string), payload_json (string, the section 3 case input), created_at (timestamp)
 
-**agent_output**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action`), hazard (string, empty if not per-hazard), payload_json (string, that agent's output shape), created_at (timestamp)
+**hazard**: id (u32 autoInc primary key), case_id, hazard (tag from section 1), location (string), confidence (f32), confirmed_by_tenant (bool), evidence_ids_json (string), created_at (timestamp)
 
-Reducers:
-- `save_case(case_id, payload_json)`
-- `save_output(case_id, agent, hazard, payload_json)`
+**agent_run**: id (u32 autoInc primary key), case_id, agent (`hazard` | `health` | `property` | `legal` | `packet` | `action`), hazard (tag, or "" for case-level agents), status (`pending` | `running` | `done` | `failed`), payload_json (string, that agent's own output shape, "" until done), error (string, "" unless failed), updated_at (timestamp). One row per (case_id, agent, hazard), updated in place.
 
-Each agent keeps its own output shape inside `payload_json`. The UI subscribes to `SELECT * FROM agent_output WHERE case_id = '<id>'`.
+Reducers (the module enforces the rules):
+- `create_case(case_id, address, payload_json)`: upsert
+- `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)`: case must exist, tag must be valid
+- `confirm_hazard(id, confirmed)`: the tenant's yes/no from the UI
+- `start_run(case_id, agent, hazard)`: creates the row or resets it to `running`
+- `finish_run(case_id, agent, hazard, payload_json)`: `running` to `done`
+- `fail_run(case_id, agent, hazard, error)`: `running` to `failed`
+
+Rejected with an error: unknown agent or hazard tag, unknown case, finishing a run that isn't `running`.
+
+UI subscriptions:
+- `SELECT * FROM hazard WHERE case_id = '<id>'`
+- `SELECT * FROM agent_run WHERE case_id = '<id>'`
+
+Each agent keeps its own output shape (sections 5, 7 and so on) inside `payload_json`. Agents only need two calls: `start_run` when they begin, `finish_run` or `fail_run` when they end.
