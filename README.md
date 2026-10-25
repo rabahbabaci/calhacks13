@@ -223,7 +223,7 @@ Measured so far (details in `docs/stack-findings.md`):
 ## Legal coverage
 
 - **`data/packs/ca_oakland.json`:** verified for Oakland, CA.
-- **`data/packs/ca.json`:** verified for the rest of California (reviewed 2026-10-25). Its statute excerpts match leginfo word for word.
+- **`data/packs/ca.json`:** verified for the rest of California. Its statute excerpts match leginfo word for word.
 - **Other places:** with no pack for the area, the legal agent reports the hazard as "not verified for your area" instead of guessing.
 
 Everything the app shows is general information, not legal or medical advice.
