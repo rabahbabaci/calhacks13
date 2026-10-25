@@ -60,6 +60,59 @@ class PackTest(unittest.TestCase):
     def test_no_pack_means_no_sources(self):
         self.assertEqual(agent.pack_sources(None, "dampness_mold"), ({}, None))
 
+    def test_same_as_borrows_the_other_hazards_law(self):
+        pack = agent.find_pack(OAKLAND)
+        sources, law = agent.pack_sources(pack, "cockroaches")
+        self.assertEqual(law["hazard"], "cockroaches")
+        self.assertEqual(sources["P1"]["cite"], agent.pack_sources(pack, "rodents")[0]["P1"]["cite"])
+        self.assertTrue(agent.pack_covers(pack, "cockroaches"))
+
+    def test_same_as_to_a_missing_hazard_is_not_covered(self):
+        pack = {"pack_id": "x", "jurisdiction": {"state": "CA", "city": ""}, "hazard_laws": [{"hazard": "cockroaches", "same_as": "rodents"}]}
+        self.assertFalse(agent.pack_covers(pack, "cockroaches"))
+
+
+class DraftPackTest(unittest.TestCase):
+    """data/packs/ca.json is a draft: it must not be used as verified law until a person checks it."""
+
+    CA = json.loads((agent.PACKS / "ca.json").read_text(encoding="utf-8"))
+    FRESNO = {"state": "CA", "city": "Fresno"}
+
+    def test_draft_state_pack_is_skipped_by_default(self):
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": ""}):
+            self.assertIsNone(agent.find_pack(self.FRESNO))
+            self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
+
+    def test_draft_pack_can_be_turned_on_and_is_labelled(self):
+        with mock.patch.dict(agent.os.environ, {"LEGAL_DRAFT_PACKS": "1"}):
+            pack = agent.find_pack(self.FRESNO)
+            self.assertEqual(pack["pack_id"], "ca")
+            self.assertEqual(agent.find_pack(OAKLAND)["pack_id"], "ca-oakland")
+        sources, law = agent.pack_sources(pack, "dampness_mold")
+        self.assertFalse(any(s["verified"] for s in sources.values()))
+        self.assertTrue(sources["P0"]["cite"].startswith("DRAFT"))
+        self.assertTrue(all(s["jurisdiction"] == "CA" for s in sources.values()))
+
+    def test_ca_pack_matches_the_oakland_format(self):
+        oakland = agent.find_pack(OAKLAND)
+        self.assertEqual(self.CA["status"], "draft_needs_verification")
+        self.assertIsNone(self.CA["verified_on"])
+        self.assertEqual(self.CA["jurisdiction"], {"state": "CA", "city": ""})
+        self.assertEqual(set(oakland) - set(self.CA), set())
+        self.assertEqual({h["hazard"] for h in self.CA["hazard_laws"]}, {h["hazard"] for h in oakland["hazard_laws"]})
+        # Every hazard tag in docs/contracts.md section 1.
+        for hazard in ["dampness_mold", "water_leak", "rodents", "cockroaches", "exposed_wiring", "lead_paint",
+                       "inadequate_heat", "carbon_monoxide", "gas_leak"]:
+            self.assertTrue(agent.pack_covers(self.CA, hazard), hazard)
+
+    def test_every_citation_has_an_official_source_and_excerpt(self):
+        for law in self.CA["hazard_laws"]:
+            for c in law.get("citations", []):
+                self.assertTrue(c["source_url"].startswith("https://leginfo.legislature.ca.gov/"), c)
+                self.assertTrue(c["excerpt"], c)
+        for item in self.CA["general_rules"] + self.CA["city_procedures"] + self.CA["legal_aid"]:
+            self.assertTrue(item["source_url"].startswith("https://"), item)
+
 
 class SaveSourceTest(unittest.TestCase):
     PAGE = "## Section 1941.1\nA dwelling shall be deemed untenantable if it substantially lacks **effective waterproofing** and weather protection."
