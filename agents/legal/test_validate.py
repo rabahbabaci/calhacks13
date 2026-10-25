@@ -41,6 +41,11 @@ class ValidateTest(unittest.TestCase):
             _, dropped = run("tenant_options", text, ["P1"])
             self.assertTrue(dropped and dropped[0]["reason"].startswith("never_say"), text)
 
+    def test_bare_string_claim_is_dropped_not_crashed(self):
+        out, cited, dropped = validate("dampness_mold", {"deadlines": ["none", {"text": "Dampness.", "source_ids": ["P1"]}]}, SOURCES)
+        self.assertEqual(len(out["deadlines"]), 1)
+        self.assertEqual(dropped, [{"hazard": "dampness_mold", "field": "deadlines", "text": "none", "reason": "claim is not an object"}])
+
     def test_days_must_appear_in_cited_source(self):
         self.assertEqual(run("deadlines", "Wait 14 days after notice.", ["G2"])[1][0]["reason"], "14 days not stated in the cited sources")
         out, dropped = run("deadlines", "30 days after notice is presumed reasonable, not a fixed deadline.", ["G2"])

@@ -102,6 +102,9 @@ def validate(draft, results):
     for field in FINDING_FIELDS:
         findings[field] = []
         for claim in draft.get(field) or []:
+            if not isinstance(claim, dict):
+                dropped.append({"field": field, "text": str(claim), "reason": "claim is not an object"})
+                continue
             text = str(claim.get("text", "")).strip()
             ids = [id_map.get(str(x).strip()) for x in claim.get("record_ids") or []]
             reason = None

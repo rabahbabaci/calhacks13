@@ -87,6 +87,8 @@ def main():
     runs = {(r["agent"], r["hazard"]): r for r in sql(
         f"SELECT agent, hazard, status, payload_json, error FROM agent_run WHERE case_id = '{cid}'")}
     failures = []
+    if proc.returncode != 0:
+        failures.append(f"orchestrator exited {proc.returncode}: a run failed or timed out before a retry (see its log above)")
     for tag, _loc, _conf, _ids in DEMO_HAZARDS:
         for agent in agents:
             run = runs.get((agent, tag))

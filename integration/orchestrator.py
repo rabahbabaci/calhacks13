@@ -21,9 +21,9 @@ Adding an agent: one line in AGENTS (per confirmed hazard) or CASE_AGENTS (once 
 case, hazard ""). Property is case-level: it launches when the case has an address
 and has no property run. Health and legal still wait for confirm_hazard.
 
-Env: STDB_URL etc. from .env (see docs/stack-findings.md). The legal agent wants
-ANTHROPIC_API_KEY_Legal and APIFY_TOKEN_Legal; when unset they fall back to
-ANTHROPIC_API_KEY and APIFY_TOKEN.
+Env: STDB_URL etc. from .env (see docs/stack-findings.md). The legal and property agents
+want ANTHROPIC_API_KEY_Legal / _Property and APIFY_TOKEN_Legal / _Property; when unset they
+fall back to ANTHROPIC_API_KEY and APIFY_TOKEN. Property is off by default (--agents).
 """
 import argparse
 import importlib.util
@@ -48,8 +48,9 @@ def load_env():
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip().removeprefix("export ").strip(), v.strip().strip('"').strip("'"))
     for key in ("ANTHROPIC_API_KEY", "APIFY_TOKEN", "COURTLISTENER_TOKEN"):
-        if os.environ.get(key) and not os.environ.get(f"{key}_Legal"):
-            os.environ[f"{key}_Legal"] = os.environ[key]
+        for suffix in ("_Legal", "_Property"):
+            if os.environ.get(key) and not os.environ.get(key + suffix):
+                os.environ[key + suffix] = os.environ[key]
 
 
 load_env()
@@ -58,6 +59,7 @@ from stdb import BASE_URL, StdbError, call_reducer, sql  # noqa: E402
 POLL_S = 1.5
 RUN_TIMEOUT_S = 180  # legal measured at 135-140s on Sat 6:56 PM; tighten after the speed pass
 STALE_S = 240  # a `running` row older than this belongs to a dead process
+MAX_RETRIES = 2  # relaunches of a failed (case, agent, hazard); after that it stays failed
 WORKERS = 6  # 3 hazards x 2 agents all in flight; urgent health runs never queue
 DEFAULT_JURISDICTION = {"state": "CA", "city": "Oakland"}
 
@@ -151,7 +153,7 @@ def ts_seconds(v):
 def fetch_state(case_id=None):
     where = f" AND case_id = '{q(case_id)}'" if case_id else ""
     hazards = sql(f"SELECT * FROM hazard WHERE confirmed_by_tenant = true{where}")
-    runs = sql(f"SELECT case_id, agent, hazard, status, updated_at FROM agent_run WHERE agent <> ''{where}")
+    runs = sql(f"SELECT case_id, agent, hazard, status, error, updated_at FROM agent_run WHERE agent <> ''{where}")
     return hazards, {(r["case_id"], r["agent"], r["hazard"]): r for r in runs}
 
 
@@ -234,11 +236,22 @@ def run_status(key):
     return (rows[0]["status"], rows[0]["error"]) if rows else ("missing", "")
 
 
+_retries = {}  # (case_id, agent, hazard) -> relaunches so far
+
+
 def should_launch(row, now):
     if row is None:
         return "no row"
     if row["status"] == "failed":
-        return "retry failed"
+        key = (row.get("case_id"), row.get("agent"), row.get("hazard"))
+        n = _retries.get(key, 0)
+        if n >= MAX_RETRIES:
+            if n == MAX_RETRIES:  # log once, then stay quiet
+                _retries[key] = n + 1
+                log.error("%s/%s/%s still failed after %d retries, giving up (%s)", *key, MAX_RETRIES, str(row.get("error", ""))[:120])
+            return None
+        _retries[key] = n + 1
+        return f"retry failed {n + 1}/{MAX_RETRIES}"
     if row["status"] == "running" and now - ts_seconds(row["updated_at"]) > STALE_S:
         return "stale running"
     return None
@@ -250,7 +263,7 @@ def main():
     ap.add_argument("--once", action="store_true", help="exit when nothing is running or launchable")
     ap.add_argument("--workers", type=int, default=WORKERS)
     ap.add_argument("--timeout", type=float, default=RUN_TIMEOUT_S)
-    ap.add_argument("--agents", default="health,legal,property", help="comma-separated subset of agents")
+    ap.add_argument("--agents", default="health,legal", help="comma-separated subset of agents (add property to run it)")
     ap.add_argument("--wait", type=float, default=120, help="--once: seconds to wait for the first confirm before exiting")
     args = ap.parse_args()
 

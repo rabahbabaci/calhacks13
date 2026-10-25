@@ -31,6 +31,8 @@ ASK_LEGAL_AID = {"legal_aid_question", "eligibility_check_needed"}
 
 def check_claim(field, claim, sources):
     """Return (clean_claim, None) or (None, reason)."""
+    if not isinstance(claim, dict):
+        return None, "claim is not an object"
     text = str(claim.get("text", "")).strip()
     ids = [str(i).strip() for i in claim.get("source_ids") or [] if str(i).strip()]
     if not text:
@@ -62,7 +64,8 @@ def validate(hazard, draft, sources):
         for claim in draft.get(field) or []:
             clean, reason = check_claim(field, claim, sources)
             if reason:
-                dropped.append({"hazard": hazard, "field": field, "text": str(claim.get("text", "")), "reason": reason})
+                text = str(claim.get("text", "")) if isinstance(claim, dict) else str(claim)
+                dropped.append({"hazard": hazard, "field": field, "text": text, "reason": reason})
                 continue
             target = field
             if field == "tenant_options" and any(sources[i].get("show_as") in ASK_LEGAL_AID for i in clean["source_ids"]):
