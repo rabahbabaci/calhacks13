@@ -9,8 +9,10 @@ Output: docs/contracts.md section 7. With saving on, each hazard is one agent_ru
 (agent "legal"): start_run when it begins, finish_run with the section 7 object, or fail_run.
 Cited sources also go to the shared legal_source table.
 
-Works for any US address. The jurisdiction (city, county, state) comes from the case, or
-from the Census geocoder when the case doesn't give it.
+By default (LEGAL_RESEARCH unset) output comes only from the verified pack, one call per
+hazard; hazards with no pack for the area go to not_assessed as "not verified for your area".
+LEGAL_RESEARCH=1 adds the research path below, for any US address. The jurisdiction (city,
+county, state) comes from the case, or from the Census geocoder when the case doesn't give it.
 
 Sources, in order of trust:
   1. The verified jurisdiction pack in data/packs/ (P#, G#, C# ids): a city pack, else a
@@ -149,6 +151,10 @@ def prior_sources(jurisdiction, taken):
     return out
 
 
+def pack_covers(pack, hazard):
+    return bool(pack) and any(h["hazard"] == hazard for h in pack.get("hazard_laws", []))
+
+
 def pack_sources(pack, hazard):
     """Number the pack's verified material for one hazard: P# laws, G# general rules, C# city procedures."""
     sources = {}
@@ -177,6 +183,26 @@ def pack_sources(pack, hazard):
     return sources, law
 
 
+CLAIM_RULES = """Claims:
+- Every claim cites the source ids it rests on. A claim without a supporting source is dropped, so do not write it.
+- One point per claim, in one or two plain sentences for a tenant. The validator drops whole claims, so never combine two points.
+- Never say: that the tenant can withhold or stop paying rent; that they have a case, will win or could get money; that anything is "court-ready"; that something "is mold" (say "visible dampness or possible mold growth"); a repair deadline in days unless a cited source states that number.
+- Items the pack lists under unverified_do_not_encode are not settled; do not state them as fact. You may put a question about them in ask_legal_aid.
+- Rent remedies (repair-and-deduct, rent limits, petitions) belong in ask_legal_aid, phrased as questions to bring to a lawyer.
+- The tenant's notes are context only. Never treat them as a finding or tie them to a hazard.
+- Legal information, not legal advice. Never promise an outcome."""
+
+# Default: answer from the verified pack only, in one call (no research tools).
+SYSTEM_PACK_ONLY = """You write general legal information for a renter about one housing hazard: what the landlord has to do, what the tenant can do, deadlines, and what to ask a legal aid lawyer.
+
+Sources: use only the verified jurisdiction pack you are given (P# citations for this hazard, P0 the pack's summary, G# general rules, C# city procedures). Do not add law from your own knowledge, even if you are confident of it.
+
+""" + CLAIM_RULES + """
+- Leave similar_cases empty.
+
+Call submit_assessment exactly once with the full object."""
+
+# LEGAL_RESEARCH=1: the pack plus live research (slower; kept for later).
 SYSTEM = """You write general legal information for a renter about one housing hazard: what the landlord has to do, what the tenant can do, deadlines, and what to ask a legal aid lawyer.
 
 Sources:
@@ -250,6 +276,16 @@ OPINIONS_TOOL = {
 }
 
 
+def research_enabled():
+    """LEGAL_RESEARCH=1 turns on web research, court search and prior sources. Off by default:
+    legal output then comes only from the verified pack, in one call per hazard."""
+    return os.environ.get("LEGAL_RESEARCH", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+SUBMIT_TOOL = next(t for t in TOOLS if t["name"] == "submit_assessment")
+NOT_VERIFIED = "not verified for your area"
+
+
 def normalize(text):
     text = text.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     return re.sub(r"[\s*_#>`]+", " ", text).strip().lower()
@@ -258,12 +294,13 @@ def normalize(text):
 class HazardRun:
     """One hazard's tool loop: research, saved sources and the final draft."""
 
-    def __init__(self, research, sources):
+    def __init__(self, research, sources, deep=False):
         self.research = research
         self.sources = sources
         self.used = 0
         self.draft = None
-        self.nudged = False
+        # The similar-cases nudge only applies with research on; pack-only runs submit once.
+        self.nudged = not deep
 
     def spend(self):
         self.used += 1
@@ -329,7 +366,7 @@ class HazardRun:
         return f"Saved {sid}."
 
 
-def describe(case, hazard_obj, pack, sources, law):
+def describe(case, hazard_obj, pack, sources, law, deep=False):
     household = case.get("household", {})
     flags = [k for k, v in household.items() if v] or ["none"]
     lines = [
@@ -348,15 +385,18 @@ def describe(case, hazard_obj, pack, sources, law):
             lines.append(f"- {sid}{extra}: {s['cite']} — {s['text']}")
         lines.append(f"Unverified, do not state as fact: {json.dumps(pack.get('unverified_do_not_encode', []))}")
         lines.append(f"Never say: {json.dumps(pack.get('never_say', []))}")
-        if not law:
+        if not law and deep:
             lines.append(f"The pack has no entry for {hazard_obj['hazard']}; research its law.")
-    else:
+    elif deep:
         j = case.get("jurisdiction") or {}
         lines.append(
             f"No verified pack covers {j.get('city') or 'this city'}, {j.get('state') or 'this state'}. Research it yourself: start with the state's "
             "landlord-tenant statute (the warranty of habitability or repair duty, notice and retaliation rules), then the city or county "
             "housing or property maintenance code, then how tenants report code violations locally. Prefer official sites."
         )
+    if not deep:
+        lines.append("\nWrite the assessment from these pack sources only, then call submit_assessment.")
+        return "\n".join(lines)
     prior = {k: v for k, v in sources.items() if v.get("prior")}
     if prior:
         lines.append("Sources checked in earlier cases in this state (excerpts were verified against the page then; cite them as L#):")
@@ -370,9 +410,14 @@ def describe(case, hazard_obj, pack, sources, law):
 
 
 def run_llm(client, research, case, hazard_obj, pack, sources, law):
-    run = HazardRun(research, sources)
-    tools = TOOLS + ([OPINIONS_TOOL] if research.has_courtlistener else [])
-    messages = [{"role": "user", "content": describe(case, hazard_obj, pack, sources, law)}]
+    deep = research_enabled()
+    run = HazardRun(research, sources, deep=deep)
+    if deep:
+        tools = TOOLS + ([OPINIONS_TOOL] if research.has_courtlistener else [])
+        system = SYSTEM.replace("{budget}", str(RESEARCH_BUDGET))
+    else:
+        tools, system = [SUBMIT_TOOL], SYSTEM_PACK_ONLY
+    messages = [{"role": "user", "content": describe(case, hazard_obj, pack, sources, law, deep=deep)}]
     usage = {"input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 0, "calls": 0}
     for _ in range(MAX_TURNS):
         resp = client.beta.messages.create(
@@ -383,7 +428,7 @@ def run_llm(client, research, case, hazard_obj, pack, sources, law):
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
             cache_control={"type": "ephemeral"},
-            system=SYSTEM.replace("{budget}", str(RESEARCH_BUDGET)),
+            system=system,
             tools=tools,
             messages=messages,
         )
@@ -428,17 +473,23 @@ def assess_case(case, save=True, client=None, research=None):
     }
     if save:
         ensure_case(case)
-    to_assess = [h for h in case.get("hazards", []) if float(h.get("confidence", 0)) >= MIN_CONFIDENCE or h.get("confirmed_by_tenant")]
+    deep = research_enabled()
+    confirmed = [h for h in case.get("hazards", []) if float(h.get("confidence", 0)) >= MIN_CONFIDENCE or h.get("confirmed_by_tenant")]
+    # Without research, only hazards the verified pack covers get an assessment.
+    to_assess = confirmed if deep else [h for h in confirmed if pack_covers(pack, h["hazard"])]
     if to_assess and client is None:
         from anthropic import Anthropic
 
         client = Anthropic(api_key=env("ANTHROPIC_API_KEY_Legal"))
-    if to_assess and research is None:
+    if to_assess and research is None and deep:
         research = Research(env("APIFY_TOKEN_Legal"), env("COURTLISTENER_TOKEN_Legal", required=False))
     for h in case.get("hazards", []):
         hazard = h["hazard"]
         if float(h.get("confidence", 0)) < MIN_CONFIDENCE and not h.get("confirmed_by_tenant"):
             result["not_assessed"].append({"hazard": hazard, "reason": "low confidence and not confirmed by tenant"})
+            continue
+        if not deep and not pack_covers(pack, hazard):
+            result["not_assessed"].append({"hazard": hazard, "reason": NOT_VERIFIED})
             continue
         if save:
             stdb_call("start_run", [case["case_id"], "legal", hazard])
@@ -461,7 +512,8 @@ def assess_hazard(case, h, pack, result, client, research):
     hazard = h["hazard"]
     t0 = time.time()
     sources, law = pack_sources(pack, hazard)
-    sources.update(prior_sources(case.get("jurisdiction"), sources))
+    if research_enabled():
+        sources.update(prior_sources(case.get("jurisdiction"), sources))
     draft, usage = run_llm(client, research, case, h, pack, sources, law)
     fields, cited, dropped = validate(hazard, draft, sources)
     result["dropped"].extend(dropped)
@@ -478,7 +530,7 @@ def assess_hazard(case, h, pack, result, client, research):
         ],
         "disclaimer": (pack or {}).get("disclaimer", DEFAULT_DISCLAIMER),
     }
-    usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2), "pages_read_total": len(research.pages)})
+    usage.update({"hazard": hazard, "llm": True, "seconds": round(time.time() - t0, 2), "pages_read_total": len(research.pages) if research else 0})
     result["usage"].append(usage)
     result["_sources"][hazard] = sources
     return assessment
