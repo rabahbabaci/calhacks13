@@ -1,8 +1,10 @@
 """Offline. No network, no Claude, no downloaded listing."""
 import unittest
+import urllib.parse
 
 from PIL import Image, ImageDraw
 
+import agent
 import shell
 import validate
 
@@ -96,3 +98,14 @@ class FactTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImageFetchTests(unittest.TestCase):
+    def test_image_url_with_a_space_is_skipped_not_raised(self):
+        # No network: the quoted URL is unreachable from here, so a bad link must come back as None.
+        url = "https://photos.example.invalid/1510 Webster_2 Bed_Type NA_1.jpg?width=1280"
+        self.assertIsNone(agent._image(url, {}))
+
+    def test_quoting_keeps_a_clean_url_unchanged(self):
+        clean = "https://photos.example.invalid/plan.jpg?width=1280&v=2"
+        self.assertEqual(urllib.parse.quote(clean, safe=":/?&=%+#@~,;!$'()*[]"), clean)

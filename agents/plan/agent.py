@@ -15,6 +15,7 @@ are direct https fetches. The host check is the same one as validate.public_http
 """
 import base64
 import html
+import http.client
 import json
 import os
 import re
@@ -293,12 +294,15 @@ def _image(url, pdfs):
     if url in pdfs or clean in pdfs:
         raw = base64.b64decode(pdfs.get(url) or pdfs.get(clean))
         return _pdf_image(raw)
+    # Listing image links sometimes carry spaces; quote them so urllib does not reject the URL.
+    clean = urllib.parse.quote(clean, safe=":/?&=%+#@~,;!$'()*[]")
     req = urllib.request.Request(clean, headers={"User-Agent": "home-plan-agent"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read(8_000_000)
             kind = resp.headers.get("Content-Type") or ""
-    except (urllib.error.URLError, TimeoutError):
+    except (urllib.error.URLError, TimeoutError, ValueError, http.client.HTTPException):
+        # A bad link is skipped like a timeout; the shell falls back to boxes or the schematic.
         return None
     if "pdf" in kind or clean.lower().endswith(".pdf"):
         return _pdf_image(data)
