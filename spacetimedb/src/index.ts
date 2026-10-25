@@ -62,7 +62,44 @@ const health_assessment = table(
   }
 );
 
-const spacetimedb = schema({ health_source, health_chunk, health_assessment });
+// Legal agent (agents/legal). See docs/contracts.md sections 6 and 7.
+const LEGAL_SOURCE_KINDS = new Set([
+  'statute',
+  'ordinance',
+  'regulation',
+  'case_law',
+  'settlement',
+  'agency',
+  'legal_aid',
+  'other',
+]);
+
+const legal_source = table(
+  { name: 'legal_source', public: true },
+  {
+    key: t.string().primaryKey(),
+    url: t.string(),
+    cite: t.string(),
+    kind: t.string(),
+    jurisdiction: t.string(),
+    excerpt: t.string(),
+    verified: t.bool(),
+    fetched_at: t.timestamp(),
+  }
+);
+
+const legal_assessment = table(
+  { name: 'legal_assessment', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    case_id: t.string().index('btree'),
+    hazard: t.string(),
+    payload_json: t.string(),
+    created_at: t.timestamp(),
+  }
+);
+
+const spacetimedb = schema({ health_source, health_chunk, health_assessment, legal_source, legal_assessment });
 export default spacetimedb;
 
 export const add_source = spacetimedb.reducer(
@@ -116,6 +153,50 @@ export const save_assessment = spacetimedb.reducer(
       throw new SenderError('payload_json is not valid JSON');
     }
     ctx.db.health_assessment.insert({
+      id: 0,
+      case_id,
+      hazard,
+      payload_json,
+      created_at: ctx.timestamp,
+    });
+  }
+);
+
+export const add_legal_source = spacetimedb.reducer(
+  {
+    url: t.string(),
+    cite: t.string(),
+    kind: t.string(),
+    jurisdiction: t.string(),
+    excerpt: t.string(),
+    verified: t.bool(),
+  },
+  (ctx, { url, cite, kind, jurisdiction, excerpt, verified }) => {
+    if (!url.startsWith('https://')) throw new SenderError(`url must be https: ${url}`);
+    if (!LEGAL_SOURCE_KINDS.has(kind)) throw new SenderError(`unknown source kind: ${kind}`);
+    if (cite.trim().length === 0) throw new SenderError('empty cite');
+    // One row per citation: several sections of one statute can share a url.
+    const key = `${cite} | ${url}`;
+    const row = { key, url, cite, kind, jurisdiction, excerpt, verified, fetched_at: ctx.timestamp };
+    if (ctx.db.legal_source.key.find(key)) {
+      ctx.db.legal_source.key.update(row);
+    } else {
+      ctx.db.legal_source.insert(row);
+    }
+  }
+);
+
+export const save_legal_assessment = spacetimedb.reducer(
+  { case_id: t.string(), hazard: t.string(), payload_json: t.string() },
+  (ctx, { case_id, hazard, payload_json }) => {
+    checkHazard(hazard);
+    if (case_id.trim().length === 0) throw new SenderError('empty case_id');
+    try {
+      JSON.parse(payload_json);
+    } catch {
+      throw new SenderError('payload_json is not valid JSON');
+    }
+    ctx.db.legal_assessment.insert({
       id: 0,
       case_id,
       hazard,
