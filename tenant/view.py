@@ -13,7 +13,7 @@ from tenant.clinics import (
     tests_for_defects,
 )
 from tenant.history import details_from_report, history_for, named_from_summary, summary_for
-from tenant.live import analyzing, empty_property, empty_runs, live_enabled
+from tenant.live import analyzing, empty_property, empty_runs, hazard_run, live_enabled
 from tenant.layout import hazard_id, layout_from_report
 from tenant.snapshot import photo_url
 from tenant.packet import build_tiles, first_landlord_send, mail_time, step_groups, suggest_next, thread_messages
@@ -110,6 +110,15 @@ def _plan_overlay():
         return None
 
 
+def _plan_matches_hazards(report, vision):
+    """The plan agent can finish before the walkthrough does, so its placements may name the
+    saved-walkthrough hazards instead of the ones the vision agent found. A plan that places none of
+    the current hazards would draw rooms with no icons, so the schematic layout is used instead."""
+    placed = {row.get("hazard_id") for row in report.get("placements") or []}
+    current = {hazard_id(h) for h in (vision or {}).get("hazards") or []}
+    return not current or bool(placed & current)
+
+
 def _layout_from_plan(report):
     by_room = {}
     for row in report.get("placements") or []:
@@ -136,8 +145,9 @@ def home_payload(case):
     layout = layout_from_report(case["vision"])
     shell = _shell_of(None)
     if report and report.get("rooms") and report.get("shell") in {"plan", "listing"}:
-        layout = _layout_from_plan(report)
         shell = _shell_of(report)
+        if _plan_matches_hazards(report, case["vision"]):
+            layout = _layout_from_plan(report)
     elif report and report.get("shell") == "schematic":
         shell = _shell_of(report)
     return {
@@ -319,6 +329,20 @@ def hazard_payload(case, hid):
     legal = (case.get("legal") or {}).get(tag) if confirmed else None
     runs = _runs_of(case)
     errors = case.get("errors") or {}
+
+    def run_status(agent, found):
+        # This hazard's own run first (live mode), then the case-level flag (fixture mode).
+        if found:
+            return "done", ""
+        if not confirmed:
+            return "waiting", ""
+        own = hazard_run(case, agent, hid)
+        if own:
+            return own["status"], own.get("error") or ""
+        return runs.get(agent) or "waiting", errors.get(agent) or ""
+
+    health_status, health_error = run_status("health", bool(health))
+    legal_status, legal_error = run_status("legal", bool(legal))
     see = ""
     risks, precautions, doctors = [], [], []
     if health:
@@ -334,8 +358,8 @@ def hazard_payload(case, hid):
         "blocks": {
             "place": {"status": "done"},
             "health": {
-                "status": "done" if health else (runs.get("health") if confirmed else "waiting"),
-                "error": errors.get("health") or "",
+                "status": health_status,
+                "error": health_error,
                 "risks": risks,
                 "precautions": precautions,
                 "see_a_doctor_if": see,
@@ -351,8 +375,8 @@ def hazard_payload(case, hid):
                 **history_for(tag, case.get("property")),
             },
             "law": {
-                "status": "done" if legal else (runs.get("legal") if confirmed else "waiting"),
-                "error": errors.get("legal") or "",
+                "status": legal_status,
+                "error": legal_error,
                 "duties": [r for r in law_rows if r["field"] == "landlord_duty"],
                 "options": [],
                 "disclaimer": (legal or {}).get("disclaimer") or "",

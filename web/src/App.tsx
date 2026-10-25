@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ClinicGroup, type ClinicRow, type Clinics, type HazardDetail, type Home, type Me, type Message, type Preview, type StepGroup, type Tile } from "./api";
-import { clearMailToken, listLandlordMail, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, storedMailToken, takeGoogleReturn } from "./googleSignIn";
+import { clearMailToken, googleRedirectUri, listLandlordMail, mailtoHref, requestGoogleMailToken, sendThroughGmail, startGoogleSignIn, storedMailToken, takeGoogleReturn } from "./googleSignIn";
 import { Analyze } from "./Analyze";
 import { Landing } from "./Landing";
 import { Model } from "./Model";
+import { Case } from "./Case";
 import { SeverityBadge, severityOf } from "./severity";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
@@ -33,7 +34,7 @@ function shellLine(home: { shell?: { kind: string; source_url: string; square_fe
   return shell.source_url ? `Floor plan from ${shell.source_url}.` : "Floor plan.";
 }
 
-type Screen = "model" | "steps" | "tracking" | "clinics";
+type Screen = "case" | "model" | "steps" | "tracking" | "clinics";
 
 const DEFECT_TESTS: Record<string, string[]> = {
   lead_paint: ["lead"],
@@ -681,10 +682,10 @@ export function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [booted, setBooted] = useState(false);
   const [home, setHome] = useState<Home | null>(null);
-  const [screen, setScreen] = useState<Screen>("model");
+  const [screen, setScreen] = useState<Screen>("case");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [address, setAddress] = useState("");
-  const [starting, setStarting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<HazardDetail | null>(null);
@@ -694,6 +695,7 @@ export function App() {
   const [preview, setPreview] = useState<{ id: string; preview: Preview } | null>(null);
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   async function refresh() {
     const next = await api.home();
@@ -830,7 +832,7 @@ export function App() {
     setPreview(null);
     setFile(null);
     setAddress("");
-    setScreen("model");
+    setScreen("case");
     try {
       const next = await api.me();
       setMe(next);
@@ -843,6 +845,7 @@ export function App() {
 
   async function onboard(event?: { preventDefault: () => void }) {
     event?.preventDefault();
+    if (starting) return;
     if (!address.trim()) {
       setError("Enter the address of the home.");
       return;
@@ -852,7 +855,7 @@ export function App() {
     try {
       const next = await api.onboard(address, file);
       setHome(next);
-      setScreen("model");
+      setScreen("case");
     } catch (err) {
       setError(String((err as Error).message || err));
     } finally {
@@ -874,8 +877,12 @@ export function App() {
 
   async function openHazard(id: string) {
     setOpenId(id);
-    setScreen("model");
-    setDetail(await api.hazard(id));
+    if (screen !== "case") setScreen("model");
+    try {
+      setDetail(await api.hazard(id));
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    }
   }
 
   async function findTesting(id: string) {
@@ -909,8 +916,12 @@ export function App() {
 
   async function confirm() {
     if (!openId) return;
-    setDetail(await api.confirm(openId));
-    await refresh();
+    try {
+      setDetail(await api.confirm(openId));
+      await refresh();
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    }
   }
 
   async function showPreview(tile: Tile) {
@@ -927,15 +938,24 @@ export function App() {
       return;
     }
     setError("");
+    setNotice("");
     setSending(true);
     try {
       const draft = preview.preview;
-      if (!GOOGLE_CLIENT_ID) {
-        throw new Error("Google is not configured, so this app cannot send Gmail.");
+      let viaGmail = true;
+      try {
+        if (!GOOGLE_CLIENT_ID) throw new Error("Google is not configured.");
+        const token = await requestGoogleMailToken();
+        await sendThroughGmail(token, dest, draft.subject, draft.body);
+      } catch (gmailErr) {
+        // No Gmail grant (demo tenant, "Sign in without Gmail", or a refused consent): hand the same
+        // draft to the tenant's mail app instead of stopping here. The record is kept either way.
+        viaGmail = false;
+        window.location.assign(mailtoHref(dest, draft.subject, draft.body));
+        setNotice(`Gmail is not connected (${String((gmailErr as Error).message || gmailErr)}), so the notice opened in your mail app. Press Send there.`);
       }
-      const token = await requestGoogleMailToken();
-      await sendThroughGmail(token, dest, draft.subject, draft.body);
       await api.send(preview.id, dest);
+      if (viaGmail) setNotice("");
       setPreview(null);
       const next = await refresh();
       await syncLandlordMail(next);
@@ -953,7 +973,7 @@ export function App() {
     if (!busy) return;
     const timer = window.setInterval(() => {
       refresh().then(() => {
-        if (openId && screen === "model") return api.hazard(openId).then(setDetail);
+        if (openId && (screen === "model" || screen === "case")) return api.hazard(openId).then(setDetail);
       }).catch((err) => setError(String(err.message || err)));
     }, 2500);
     return () => window.clearInterval(timer);
@@ -968,8 +988,15 @@ export function App() {
     const timer = window.setInterval(() => { syncLandlordMail(); }, 30000);
     return () => window.clearInterval(timer);
   }, [hasCase, mailKey, screen]);
-  const showAnalyze = analyzing && screen === "model";
+  const showAnalyze = analyzing && (screen === "model" || screen === "case");
   const showModel = hasCase && screen === "model" && !analyzing;
+  const showCase = hasCase && screen === "case" && !analyzing;
+  useEffect(() => {
+    // The case screen reflects mail and reply status, so it stays fresh on its own.
+    if (!showCase) return;
+    const timer = window.setInterval(() => { refresh().catch(() => undefined); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [showCase]);
   const colorOf = (id: string) => severityOf(home?.hazards?.find((h) => h.hazard_id === id)?.severity).color;
   const labelOf = (id: string) => {
     const hazard = home?.hazards?.find((h) => h.hazard_id === id);
@@ -988,6 +1015,7 @@ export function App() {
           <div className="top-actions">
             {hasCase && (
               <nav className="nav-tabs" aria-label="Sections">
+                <button aria-current={screen === "case" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("case"); }}>Case</button>
                 <button aria-current={screen === "model" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("model"); }}>Home</button>
                 <button aria-current={screen === "steps" ? "page" : undefined} onClick={() => { setPreview(null); closeHazard(); setScreen("steps"); }}>Next steps</button>
                 <button aria-current={screen === "tracking" ? "page" : undefined} onClick={() => { closeHazard(); setScreen("tracking"); }}>Tracking</button>
@@ -1001,6 +1029,7 @@ export function App() {
         )}
       </header>
       <main className={signedIn ? undefined : "main-center"}>
+        {notice && <p className="note">{notice}</p>}
         {error && (
           <div className="error-banner" role="alert">
             <p>
@@ -1078,6 +1107,14 @@ export function App() {
               : "The file is stored on this computer. The rooms and icons come from a saved walkthrough, so this step does not call Claude."}</p>
           </form>
         )}
+        {showCase && home && (
+          <Case
+            home={home}
+            onHazard={openHazard}
+            onStep={(tile) => { closeHazard(); setScreen("steps"); showPreview(tile); }}
+            onScreen={(next) => { closeHazard(); setScreen(next); }}
+          />
+        )}
         {showModel && home && (
           <>
             <p className="note"><b>{home.address}</b>. Select a marker in the model, or a hazard in the list below.</p>
@@ -1085,6 +1122,7 @@ export function App() {
             {home.runs?.property === "running" && <p className="note">Looking up the landlord and public records for this address.</p>}
             {home.runs?.health === "running" && <p className="note">Loading cited health notes for the problem you confirmed.</p>}
             {home.runs?.legal === "running" && <p className="note">Loading cited legal notes for the problem you confirmed.</p>}
+            {home.errors?.hazard && <p className="error">The walkthrough could not be analyzed, so the saved example hazards are shown. {home.errors.hazard}</p>}
             {home.errors?.property && <p className="error">{home.errors.property}</p>}
             <Model rooms={home.layout!.rooms} colorOf={colorOf} labelOf={labelOf} onPick={openHazard} />
             <h2 className="section-title">Hazards found</h2>

@@ -213,31 +213,53 @@ def start_after_confirm(case, hid):
     if not live_enabled():
         return
     apply_key_fallbacks()
-    _submit("health", case, lambda c: _run_health(c, hid))
-    _submit("legal", case, lambda c: _run_legal(c, hid))
+    _submit("health", case, lambda c: _run_health(c, hid), hid=hid)
+    _submit("legal", case, lambda c: _run_legal(c, hid), hid=hid)
 
 
-def _submit(agent, case, fn):
+def _submit(agent, case, fn, hid=None):
     if (case.get("runs") or {}).get(agent) == "running" and agent in {"property", "plan", "hazard"}:
         return
-    _set_run(case, agent, "running")
-    _pool.submit(_guard, agent, case, fn)
+    _set_run(case, agent, "running", hid=hid)
+    _pool.submit(_guard, agent, case, fn, hid)
 
 
-def _guard(agent, case, fn):
+def _guard(agent, case, fn, hid=None):
     try:
         fn(case)
     except Exception as exc:
-        _set_run(case, agent, "failed", f"{type(exc).__name__}: {exc}"[:400])
+        _set_run(case, agent, "failed", f"{type(exc).__name__}: {exc}"[:400], hid=hid)
 
 
-def _set_run(case, agent, status, error=""):
+def hazard_run(case, agent, hid):
+    """Status and error of one hazard's health or legal run, or None if that hazard never started one."""
+    return ((case.get("hazard_runs") or {}).get(agent) or {}).get(hid)
+
+
+def _aggregate(per_hazard):
+    """Case-level status for health or legal: running while any hazard is still running."""
+    statuses = [row["status"] for row in per_hazard.values()]
+    if "running" in statuses:
+        return "running"
+    if statuses and all(status == "failed" for status in statuses):
+        return "failed"
+    return "done" if statuses else "waiting"
+
+
+def _set_run(case, agent, status, error="", hid=None):
     with _lock:
-        case.setdefault("runs", {})[agent] = status
         errors = case.setdefault("errors", {})
+        if hid is not None:
+            # Health and legal run once per confirmed hazard. Keep each hazard's own status so one
+            # finished hazard does not mark the others done, and keep polling until the last one ends.
+            per_hazard = case.setdefault("hazard_runs", {}).setdefault(agent, {})
+            per_hazard[hid] = {"status": status, "error": error}
+            status = _aggregate(per_hazard)
+            error = error or ""
+        case.setdefault("runs", {})[agent] = status
         if error:
             errors[agent] = error
-        else:
+        elif hid is None or status != "failed":
             errors.pop(agent, None)
 
 
@@ -330,10 +352,10 @@ def _run_health(case, hid):
     client = _claude("ANTHROPIC_API_KEY")
     result = _load("health").assess_case(section3(case, hid), save=save_enabled(), client=client)
     if apply_assessments(case, "health", result):
-        _set_run(case, "health", "done")
+        _set_run(case, "health", "done", hid=hid)
         return
     reason = "; ".join(row.get("reason") or "" for row in result.get("not_assessed") or []) or "no assessment"
-    _set_run(case, "health", "failed", reason)
+    _set_run(case, "health", "failed", reason, hid=hid)
 
 
 def _run_legal(case, hid):
@@ -342,11 +364,11 @@ def _run_legal(case, hid):
     client = _claude("ANTHROPIC_API_KEY_Legal")
     result = _load("legal").assess_case(section3(case, hid), save=save_enabled(), client=client)
     if apply_assessments(case, "legal", result):
-        _set_run(case, "legal", "done")
+        _set_run(case, "legal", "done", hid=hid)
         return
     reason = "; ".join(row.get("reason") or "" for row in result.get("not_assessed") or [])
     reason = reason or "; ".join(row.get("error") or "" for row in result.get("failed") or []) or "no assessment"
-    _set_run(case, "legal", "failed", reason)
+    _set_run(case, "legal", "failed", reason, hid=hid)
 
 
 def _run_vision(case, path):

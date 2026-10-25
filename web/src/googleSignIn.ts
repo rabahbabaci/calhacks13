@@ -128,8 +128,8 @@ function headerOf(headers: { name?: string; value?: string }[] | undefined, name
   return (match?.value || "").trim();
 }
 
-function addressList(value: string) {
-  return (value.toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || []);
+function addressList(value: string): string[] {
+  return value.toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || [];
 }
 
 function parseMailDate(value: string) {
@@ -155,7 +155,7 @@ export async function listLandlordMail(accessToken: string, addresses: string[],
   if (!list.ok) {
     throw new Error((listed as { error?: { message?: string } }).error?.message || "Gmail could not list landlord mail.");
   }
-  const rows = [];
+  const rows: { gmail_id: string; direction: string; counterparty: string; subject: string; at: string; body: string }[] = [];
   for (const item of (listed as { messages?: { id: string }[] }).messages || []) {
     const res = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(item.id) + "?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date",

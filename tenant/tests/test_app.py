@@ -1366,3 +1366,59 @@ def test_api_only_when_no_dist(api, tmp_path, monkeypatch):
     client, _state = api
     status, _headers, _body = _raw(client, "GET", "/")
     assert status == 401
+
+
+def test_each_confirmed_hazard_keeps_its_own_health_and_legal_status(monkeypatch):
+    """One finished hazard must not mark the others done, and the case stays running until the last one ends."""
+    from tenant import live
+
+    monkeypatch.setenv("HOME_LIVE", "1")
+    item = new_case("live", "live@localhost", "Live", "123 Example St, Oakland, CA 94612")
+    mold = "dampness_mold|bedroom wall beside the window"
+    lead = "lead_paint|bedroom sill below the sliding door"
+    for hid in (mold, lead):
+        item["confirmed"][hid] = True
+        live._set_run(item, "health", "running", hid=hid)
+        live._set_run(item, "legal", "running", hid=hid)
+    assert home_payload(item)["runs"]["health"] == "running"
+
+    item["health"]["dampness_mold"] = {"health_risks": [{"text": "Damp rooms are linked with coughing."}]}
+    live._set_run(item, "health", "done", hid=mold)
+    live._set_run(item, "legal", "failed", "no assessment", hid=mold)
+    assert hazard_payload(item, mold)["blocks"]["health"]["status"] == "done"
+    assert hazard_payload(item, mold)["blocks"]["law"]["status"] == "failed"
+    assert hazard_payload(item, mold)["blocks"]["law"]["error"] == "no assessment"
+    # The lead-paint sheet is still loading, and the browser keeps polling because the case is still running.
+    assert hazard_payload(item, lead)["blocks"]["health"]["status"] == "running"
+    assert hazard_payload(item, lead)["blocks"]["law"]["status"] == "running"
+    assert hazard_payload(item, lead)["blocks"]["law"]["error"] == ""
+    assert home_payload(item)["runs"] == {**home_payload(item)["runs"], "health": "running", "legal": "running"}
+
+    item["health"]["lead_paint"] = {"health_risks": [{"text": "Lead dust harms children."}]}
+    live._set_run(item, "health", "done", hid=lead)
+    live._set_run(item, "legal", "done", hid=lead)
+    assert hazard_payload(item, lead)["blocks"]["health"]["status"] == "done"
+    assert home_payload(item)["runs"]["health"] == "done"
+    assert home_payload(item)["runs"]["legal"] == "done"
+    assert home_payload(item)["errors"] == {}
+
+
+def test_plan_placements_for_other_hazards_fall_back_to_the_walk_layout(monkeypatch):
+    """The plan agent can finish before vision replaces the saved walkthrough. Its placements then name
+    hazards that no longer exist, and the home must still show every current hazard on the model."""
+    monkeypatch.setenv("HOME_LIVE", "1")
+    monkeypatch.delenv("HOME_PLAN_JSON", raising=False)
+    item = new_case("live", "live@localhost", "Live", "123 Example St, Oakland, CA 94612")
+    rooms = [{"id": "room_0", "name": "kitchen", "polygon": [[0, 0], [4, 0], [4, 3], [0, 3]], "height": 2.6, "door": {"wall": "south", "width": 0.9, "center": 0.5}}]
+    item["plan"] = {"shell": "plan", "scale": "bar", "source_url": "https://example.com/plan", "square_feet": 700, "rooms": rooms,
+                    "placements": [{"room_id": "room_0", "hazard_id": "dampness_mold|bedroom wall beside the window", "icon": [1, 1, 1]}]}
+    home = home_payload(item)
+    assert home["shell"]["kind"] == "plan"
+    assert home["layout"]["rooms"][0]["hazards"][0]["hazard_id"] == "dampness_mold|bedroom wall beside the window"
+
+    item["vision"] = {"hazards": [{"hazard": "water_leak", "label": "Water leak", "location": "under the sink", "room": "kitchen",
+                                   "severity": "high", "confidence": 0.8, "evidence_ids": ["video_1_t10s"], "first_seen_s": 10}]}
+    home = home_payload(item)
+    assert home["shell"]["kind"] == "plan"
+    placed = [h["hazard_id"] for room in home["layout"]["rooms"] for h in room["hazards"]]
+    assert placed == ["water_leak|under the sink"]

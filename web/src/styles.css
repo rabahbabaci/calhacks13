@@ -13,6 +13,10 @@
   --warn: #7a5600;
   --danger: #8e1b1b;
   --focus: #1f2421;
+  --low: #0f6e8c;
+  --moderate: #80600a;
+  --high: #7b3f9e;
+  --urgent: #8e1b1b;
   color: var(--ink);
   background: var(--bg);
   font-family: "Avenir Next", "Segoe UI", sans-serif;
@@ -52,10 +56,12 @@ h1, h2, h3 { line-height: 1.25; }
 @media (max-width: 600px) {
   .top { padding: 8px 12px; }
   .top { flex-wrap: nowrap; }
-  .top:has(.nav-tabs) { flex-wrap: wrap; }
-  .top-actions:has(.nav-tabs) { width: 100%; justify-content: space-between; flex-wrap: nowrap; }
-  .nav-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .nav-tabs button { padding: 8px 10px; white-space: nowrap; }
+  /* With tabs: logo and Sign out on the first row, every tab on a full-width second row. */
+  .top:has(.nav-tabs) { flex-wrap: wrap; row-gap: 8px; }
+  .top-actions:has(.nav-tabs) { display: contents; }
+  .top-actions:has(.nav-tabs) > .ghost { order: 1; }
+  .nav-tabs { order: 2; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 4px; }
+  .nav-tabs button { padding: 8px 6px; white-space: nowrap; font-size: 14px; }
 }
 main { padding: 16px; max-width: 880px; width: 100%; margin: 0 auto; }
 main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
@@ -397,4 +403,25 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 }
 @media (max-width: 480px) {
   .lp-brand span { font-size: 21px; }
+}
+
+/* Case screen: next action, timeline, home summary. Uses the card and hazard-btn styles above. */
+.case { display: flex; flex-direction: column; gap: 14px; }
+.case-next h2 { margin: 4px 0 6px; font-family: Georgia, "Iowan Old Style", serif; font-weight: 500; font-size: 26px; }
+.case-next > p { margin: 0 0 12px; font-size: 15px; line-height: 1.45; }
+.case-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.case-head h2 { margin: 0; }
+.case-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.case-steps li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; align-items: start; padding: 8px 6px; border-radius: 12px; }
+.case-steps li.is-now { background: rgba(166, 132, 44, 0.1); box-shadow: inset 0 0 0 1px rgba(166, 132, 44, 0.3); }
+.case-steps li.is-later { opacity: 0.6; }
+.case-mark { width: 14px; height: 14px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
+.case-steps .is-done .case-mark { border-color: var(--low); background: var(--low); }
+.case-steps .is-now .case-mark { border-color: var(--moderate); background: var(--moderate); box-shadow: 0 0 0 5px rgba(166, 132, 44, 0.18); }
+.case-steps strong { display: block; font-size: 15px; }
+.case-steps small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: #5c564c; }
+.case-landlord { margin-top: 10px; }
+@media (min-width: 760px) {
+  .case { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .case-next { grid-column: 1 / -1; }
 }
