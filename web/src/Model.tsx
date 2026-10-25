@@ -4,55 +4,6 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { Room } from "./api";
 
-function twoLines(text: string) {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines = ["", ""];
-  let line = 0;
-  for (const word of words) {
-    const next = (lines[line] + " " + word).trim();
-    if (next.length <= 32) lines[line] = next;
-    else if (line === 0) {
-      line = 1;
-      lines[1] = word;
-    } else break;
-  }
-  return lines[1] ? `${lines[0]}\n${lines[1]}` : lines[0];
-}
-
-function separateLabels(root: HTMLElement) {
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>(".marker-label")];
-  if (buttons.length < 2) return;
-  const extra = buttons.map(() => 0);
-  for (let pass = 0; pass < 4; pass += 1) {
-    buttons.forEach((button, i) => {
-      const base = button.dataset.base || "0px";
-      button.style.transform = `translateX(calc(${base} + ${extra[i]}px))`;
-    });
-    void root.offsetWidth;
-    const rects = buttons.map((button) => button.getBoundingClientRect());
-    let hit = false;
-    for (let i = 0; i < buttons.length; i += 1) {
-      for (let j = i + 1; j < buttons.length; j += 1) {
-        const a = rects[i];
-        const b = rects[j];
-        const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-        const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-        if (overlapX <= 2 || overlapY <= 2) continue;
-        hit = true;
-        const dir = a.left + a.width / 2 <= b.left + b.width / 2 ? -1 : 1;
-        const push = overlapX / 2 + 8;
-        extra[i] += dir * push;
-        extra[j] -= dir * push;
-      }
-    }
-    if (!hit) return;
-  }
-  buttons.forEach((button, i) => {
-    const base = button.dataset.base || "0px";
-    button.style.transform = `translateX(calc(${base} + ${extra[i]}px))`;
-  });
-}
-
 function ring(polygon: number[][]) {
   const pts = polygon.map((p) => [p[0], p[1]] as [number, number]);
   const first = pts[0];
@@ -296,11 +247,13 @@ export function Model({
   rooms,
   colorOf,
   labelOf,
+  pinOf,
   onPick,
 }: {
   rooms: Room[];
   colorOf: (id: string) => string;
   labelOf: (id: string) => string;
+  pinOf: (id: string) => string;
   onPick: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -367,27 +320,34 @@ export function Model({
       });
       furnish(scene, kind, x0, z0, x1, z1);
 
-      const ordered = [...room.hazards].sort((p, q) => p.icon[0] - q.icon[0] || p.icon[2] - q.icon[2]);
-      ordered.forEach((hz, index) => {
+      room.hazards.forEach((hz) => {
         const [x, y, z] = hz.icon;
         const color = colorOf(hz.hazard_id);
         addStain(scene, targets, hz.hazard_id, color, x, y, z, pts);
 
+        // A small pin anchored on the stain: severity shape and the number from the hazard list.
+        // The full name shows on hover or keyboard focus, so pins never cover each other's spot.
+        const label = labelOf(hz.hazard_id) || "Hazard";
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "marker-label";
-        button.textContent = twoLines(labelOf(hz.hazard_id) || "Hazard");
+        button.className = "marker-pin";
+        button.setAttribute("aria-label", label);
+        const pinText = document.createElement("b");
+        pinText.textContent = pinOf(hz.hazard_id);
+        const name = document.createElement("span");
+        name.textContent = label;
+        button.append(pinText, name);
+        button.style.setProperty("--pin", colorOf(hz.hazard_id));
         button.addEventListener("click", (event) => {
           event.stopPropagation();
           pick.current(hz.hazard_id);
         });
         const holder = document.createElement("div");
         holder.style.pointerEvents = "none";
-        button.dataset.base = ordered.length > 1 ? (index % 2 === 0 ? "-78%" : "78%") : "0px";
         holder.appendChild(button);
         const face = wallOf(pts, x, z);
         const tag = new CSS2DObject(holder);
-        tag.position.set(face.x, y + 0.42, face.z);
+        tag.position.set(face.x, y + 0.36, face.z);
         scene.add(tag);
       });
     });
@@ -440,7 +400,6 @@ export function Model({
       controls.update();
       renderer.render(scene, camera);
       labels.render(scene, camera);
-      separateLabels(el);
     };
     loop();
     window.addEventListener("resize", resize);
@@ -454,7 +413,7 @@ export function Model({
       if (renderer.domElement.parentElement === el) el.removeChild(renderer.domElement);
       if (labels.domElement.parentElement === el) el.removeChild(labels.domElement);
     };
-    // key captures the room layout; colorOf and labelOf are read when the scene is built
+    // key captures the room layout; colorOf, labelOf and pinOf are read when the scene is built
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

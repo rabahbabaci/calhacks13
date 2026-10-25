@@ -112,6 +112,10 @@ export function nextAction(home: Home): NextAction {
   return { title: "Nothing to do right now", blurb: home.next?.blurb || "Check back when the landlord writes.", button: "", go: "" };
 }
 
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]?.toUpperCase() || "").join("") || "?";
+}
+
 export function Case({ home, onHazard, onStep, onScreen }: {
   home: Home;
   onHazard: (id: string) => void;
@@ -123,6 +127,14 @@ export function Case({ home, onHazard, onStep, onScreen }: {
   const landlord = home.landlord;
   const contact = landlord?.contact?.email || landlord?.contact?.phone || "";
   const done = steps.filter((step) => step.mark === "done").length;
+  const hazards = home.hazards || [];
+  const messages = (home.tracking?.messages || []).filter((m) => !m.role || m.role === "landlord");
+  const stats = [
+    { label: "Problems found", value: String(hazards.length) },
+    { label: "Confirmed by you", value: `${hazards.filter((h) => h.confirmed).length} of ${hazards.length}` },
+    { label: "Notices sent", value: String(messages.filter((m) => m.direction === "out").length) },
+    { label: "Landlord replies", value: String(messages.filter((m) => m.direction === "in").length) },
+  ];
 
   function go() {
     if (action.go === "hazard" && action.hazardId) onHazard(action.hazardId);
@@ -131,54 +143,88 @@ export function Case({ home, onHazard, onStep, onScreen }: {
   }
 
   return (
-    <section className="case">
-      <article className="card case-next">
-        <p className="step-kicker">Up next</p>
-        <h2>{action.title}</h2>
-        {action.blurb && <p>{action.blurb}</p>}
+    <section className="dash" aria-labelledby="dash-title">
+      <header className="dash-head">
+        <p className="kicker">Your home</p>
+        <h2 id="dash-title">{home.address || "Your home"}</h2>
+      </header>
+
+      <article className="dash-next">
+        <div>
+          <p className="kicker">Up next</p>
+          <h3>{action.title}</h3>
+          {action.blurb && <p>{action.blurb}</p>}
+        </div>
         {action.button && <button className="primary" onClick={go}>{action.button}</button>}
       </article>
 
-      <article className="card">
-        <header className="case-head">
-          <h2>Your case</h2>
-          <span className="status">{done} of {steps.length} done</span>
-        </header>
-        <ol className="case-steps" aria-label="Case progress">
-          {steps.map((step) => (
-            <li key={step.id} className={`is-${step.mark}`}>
-              <span className="case-mark" aria-hidden="true" />
-              <div>
-                <strong>{step.title}</strong>
-                <small>{step.detail}</small>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </article>
+      <ul className="dash-stats" aria-label="Case at a glance">
+        {stats.map((stat) => (
+          <li key={stat.label}><b>{stat.value}</b><span>{stat.label}</span></li>
+        ))}
+      </ul>
 
-      <article className="card">
-        <header className="case-head">
-          <h2>Your home</h2>
-          <button className="ghost" onClick={() => onScreen("model")}>See the 3D model</button>
-        </header>
-        <div className="rooms">
-          {(home.hazards || []).map((h) => (
-            <button key={h.hazard_id} className="hazard-btn" onClick={() => onHazard(h.hazard_id)}>
-              <span><strong>{h.label}</strong><span>{h.room}{h.confirmed ? " · confirmed" : ""}</span></span>
-              <SeverityBadge level={h.severity} />
-            </button>
-          ))}
+      <div className="dash-grid">
+        <article className="dash-card">
+          <header className="dash-card-head">
+            <h3>Progress</h3>
+            <span className="status">{done} of {steps.length} done</span>
+          </header>
+          <ol className="dash-steps" aria-label="Case progress">
+            {steps.map((step, i) => (
+              <li key={step.id} className={`is-${step.mark}`}>
+                <span className="dash-mark" aria-hidden="true">{step.mark === "done" ? "✓" : i + 1}</span>
+                <div>
+                  <strong>
+                    {step.title}
+                    <span className="dash-state">{step.mark === "done" ? "Done" : step.mark === "now" ? "Now" : "Later"}</span>
+                  </strong>
+                  <small>{step.detail}</small>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </article>
+
+        <div className="dash-side">
+          <article className="dash-card">
+            <header className="dash-card-head">
+              <h3>Problems</h3>
+              <button className="ghost" onClick={() => onScreen("model")}>See the 3D model</button>
+            </header>
+            <div className="rooms">
+              {hazards.map((h, i) => (
+                <button key={h.hazard_id} className="hazard-btn" onClick={() => onHazard(h.hazard_id)}>
+                  <span className="hazard-main">
+                    <b className="hazard-num" aria-label={`Marker ${i + 1}`}>{i + 1}</b>
+                    <span><strong>{h.label}</strong><span className="hazard-room">{h.room}{h.confirmed ? " · confirmed" : ""}</span></span>
+                  </span>
+                  <SeverityBadge level={h.severity} />
+                </button>
+              ))}
+              {hazards.length === 0 && <p className="note">Nothing was found in the walkthrough.</p>}
+            </div>
+          </article>
+
+          {landlord && (
+            <article className="dash-card dash-landlord">
+              <header className="dash-card-head"><h3>Landlord</h3></header>
+              <div className="landlord-head">
+                <span className="initials">{initials(landlord.company || "")}</span>
+                <span>
+                  <strong>{landlord.company}</strong>
+                  {contact && <small>{contact}</small>}
+                </span>
+              </div>
+              <div className="counts">
+                <div className="count"><b>{landlord.open}</b><span>open records</span></div>
+                <div className="count"><b>{landlord.closed}</b><span>closed records</span></div>
+              </div>
+              {home.runs?.property === "running" && <p className="note">Still looking up public records.</p>}
+            </article>
+          )}
         </div>
-        {landlord && (
-          <p className="note case-landlord">
-            <b>{landlord.company}</b>
-            {contact ? ` · ${contact}` : ""}
-            {` · ${landlord.open} open, ${landlord.closed} closed public record${landlord.open + landlord.closed === 1 ? "" : "s"}`}
-            {home.runs?.property === "running" ? " · still looking up records" : ""}
-          </p>
-        )}
-      </article>
+      </div>
     </section>
   );
 }
