@@ -3,6 +3,7 @@ import json
 import threading
 from pathlib import Path
 from urllib.parse import quote
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
@@ -202,7 +203,11 @@ class Client:
         if content_type:
             headers["Content-Type"] = content_type
         req = Request(self.base + path, data=data, headers=headers, method=method)
-        with urlopen(req) as res:
+        try:
+            res = urlopen(req)
+        except HTTPError as err:  # 4xx replies carry a JSON error body
+            res = err
+        with res:
             raw = res.read()
             cookie = res.headers.get("Set-Cookie")
             if cookie:
@@ -278,3 +283,128 @@ def test_pack_loader_matches_the_form_tile():
     urls = {p["source_url"] for p in pack["city_procedures"]}
     form = next(t for t in build_tiles(case()) if t["id"] == "form-complaint")
     assert form["preview"]["form"]["url"] in urls
+
+
+# Google sign-in. Tokens below are signed with a throwaway key made at test time; only the
+# Google cert fetch is stubbed, so audience, issuer, expiry and email_verified are checked for real.
+CLIENT_ID = "test-client.apps.googleusercontent.com"
+
+
+@pytest.fixture(scope="module")
+def google_keys():
+    from cryptography.hazmat.primitives import serialization  # a google-auth dependency
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    pub = key.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+    return priv.decode(), pub.decode()
+
+
+def _stub_certs(google_keys, monkeypatch):
+    from google.oauth2 import id_token
+
+    monkeypatch.setattr(id_token, "_fetch_certs", lambda _request, _url: {"kid-test": google_keys[1]})
+
+
+def _google_token(google_keys, monkeypatch, **claims):
+    import time
+    from google.auth import crypt, jwt
+
+    priv = google_keys[0]
+    _stub_certs(google_keys, monkeypatch)
+    now = int(time.time())
+    payload = {"iss": "https://accounts.google.com", "aud": CLIENT_ID, "sub": "1234567890", "email": "tenant@example.com",
+               "email_verified": True, "name": "Test Tenant", "iat": now, "exp": now + 300}
+    payload.update(claims)
+    return jwt.encode(crypt.RSASigner.from_string(priv, "kid-test"), payload).decode()
+
+
+def test_google_verifier_accepts_a_good_token_and_rejects_bad_ones(google_keys, monkeypatch):
+    from tenant.auth import verify_google_token
+
+    info = verify_google_token(_google_token(google_keys, monkeypatch), CLIENT_ID, request=object())
+    assert info == {"sub": "1234567890", "email": "tenant@example.com", "name": "Test Tenant"}
+    with pytest.raises(ValueError, match="audience"):
+        verify_google_token(_google_token(google_keys, monkeypatch, aud="other-client"), CLIENT_ID, request=object())
+    with pytest.raises(ValueError, match="issuer"):
+        verify_google_token(_google_token(google_keys, monkeypatch, iss="https://evil.example"), CLIENT_ID, request=object())
+    with pytest.raises(ValueError, match="expired"):
+        verify_google_token(_google_token(google_keys, monkeypatch, exp=1), CLIENT_ID, request=object())
+    with pytest.raises(ValueError, match="not verified"):
+        verify_google_token(_google_token(google_keys, monkeypatch, email_verified=False), CLIENT_ID, request=object())
+    with pytest.raises(ValueError):
+        verify_google_token("not.a.token", CLIENT_ID, request=object())
+
+
+@pytest.fixture
+def google_api(google_keys, monkeypatch):
+    from tenant.auth import verify_google_token
+
+    def verify(credential, client_id):
+        return verify_google_token(credential, client_id, request=object())
+
+    _stub_certs(google_keys, monkeypatch)
+    state = AppState(mailer=MemoryMailer(), google_client_id=CLIENT_ID, verify_google=verify)
+    httpd = serve(port=0, state=state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    host, port = httpd.server_address
+    yield Client(f"http://{host}:{port}"), state
+    httpd.shutdown()
+
+
+def _google_login(client, token):
+    return client.call("POST", "/api/auth/google", json.dumps({"credential": token}).encode(), "application/json")
+
+
+def test_google_login_creates_a_session_keyed_by_sub(google_api, google_keys, monkeypatch):
+    client, state = google_api
+    assert state.dev_login is False
+    status, me = client.call("GET", "/api/me")
+    assert (me["signed_in"], me["google"], me["dev_login"]) == (False, True, False)
+    status, body = _google_login(client, _google_token(google_keys, monkeypatch))
+    assert status == 200 and body["name"] == "Test Tenant"
+    _status, me = client.call("GET", "/api/me")
+    assert me["signed_in"] is True and me["email"] == "tenant@example.com"
+    assert state.users["1234567890"]["sub"] == "1234567890"
+    _status, home = _onboard(client)
+    assert home["hazards"]
+    case_id = state.users["1234567890"]["case_id"]
+    assert case_id == new_case("1234567890", "", "", "x, Oakland, CA")["case_id"]
+    status, _body = client.call("POST", "/api/dev/login", b"{}")
+    assert status == 404
+
+
+def test_google_login_rejects_fake_and_wrong_audience_tokens(google_api, google_keys, monkeypatch):
+    client, state = google_api
+    status, body = _google_login(client, "fake.token.value")
+    assert status == 401 and "Invalid" in body["error"]
+    status, _body = _google_login(client, _google_token(google_keys, monkeypatch, aud="other-client"))
+    assert status == 401
+    status, _body = client.call("POST", "/api/auth/google", b"{}", "application/json")
+    assert status == 401
+    assert state.sessions == {}
+    _status, me = client.call("GET", "/api/me")
+    assert me["signed_in"] is False
+
+
+def test_logout_ends_the_session(google_api, google_keys, monkeypatch):
+    client, state = google_api
+    _google_login(client, _google_token(google_keys, monkeypatch))
+    assert len(state.sessions) == 1
+    status, _body = client.call("POST", "/api/auth/logout", b"")
+    assert status == 200
+    assert state.sessions == {}
+    _status, me = client.call("GET", "/api/me")
+    assert me["signed_in"] is False
+
+
+def test_dev_login_flag_decides_the_fallback(monkeypatch):
+    monkeypatch.delenv("HOME_DEV_LOGIN", raising=False)
+    assert AppState(google_client_id="").dev_login is True
+    assert AppState(google_client_id=CLIENT_ID).dev_login is False
+    monkeypatch.setenv("HOME_DEV_LOGIN", "1")
+    assert AppState(google_client_id=CLIENT_ID).dev_login is True
+    monkeypatch.setenv("HOME_DEV_LOGIN", "0")
+    assert AppState(google_client_id="").dev_login is False
