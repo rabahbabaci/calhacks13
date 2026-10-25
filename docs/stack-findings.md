@@ -2,10 +2,11 @@
 
 Running log for the SpacetimeDB module and the health corpus ingest. Updated with every commit from this workstream.
 
-## Status (Sat Oct 24, 9:52 AM PT)
+## Status (Sat Oct 24, 6:00 PM PT)
 
 | Item | State |
 |---|---|
+| Shared team db (Maincloud) | Live: https://maincloud.spacetimedb.com, database `home`, 15 sources / 110 chunks |
 | SpacetimeDB module `home` | Live on Rabah's laptop, schema matches docs/contracts.md section 4 |
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
 | urls.csv validation | Done: 16 of 17 valid, 8 hazards covered (no gas_leak) |
@@ -27,7 +28,7 @@ rows = sql("SELECT * FROM health_chunk WHERE hazard = 'dampness_mold'")
 call_reducer("save_assessment", ["case_001", "dampness_mold", json.dumps(payload)])
 ```
 
-- Server: http://127.0.0.1:3000, database `home`. Override with env vars STDB_URL and STDB_DB.
+- Default is local http://127.0.0.1:3000. The team uses Maincloud, see How to connect.
 - No token needed locally. SpacetimeDB 2.0 allows anonymous HTTP access to public tables and reducers. If STDB_TOKEN is set it gets sent as a Bearer token.
 - Reducer arguments are positional, in contract order.
 - Any failure raises StdbError. Reducer validation failures come back as HTTP 530 with the error message in the body.
@@ -41,9 +42,59 @@ Same tables, columns and reducer signatures as the contract. Added on top:
 - Reducers reject: unknown hazard tag, unknown publisher, non-https url, a chunk whose source does not exist or has a different hazard, empty chunk text, payload_json that is not valid JSON, empty case_id.
 - Indexes: health_chunk.hazard, health_chunk (source_url, ordinal), health_assessment.case_id.
 
-## Open question for team sync
+## How to connect (shared team db)
 
-The server only listens on 127.0.0.1 on Rabah's laptop, so other laptops can't reach it. Options: listen on the LAN (depends on venue Wi-Fi) or publish `home` to SpacetimeDB maincloud. Needs a decision before other agents integrate.
+- URL: https://maincloud.spacetimedb.com
+- Database: `home`
+- No token needed. Requests without an Authorization header get an anonymous identity that can run SQL on public tables and call reducers.
+
+### Python
+
+1. Add this line to your own `.env` in the repo root. Check the file ends with a newline first, and never commit `.env`.
+
+```
+STDB_URL=https://maincloud.spacetimedb.com
+```
+
+2. Use data/stdb.py:
+
+```python
+import json, sys
+sys.path.insert(0, "data")
+from stdb import sql, call_reducer, StdbError
+
+rows = sql("SELECT * FROM health_chunk WHERE hazard = 'dampness_mold'")
+call_reducer("save_assessment", ["case_001", "dampness_mold", json.dumps(payload)])
+```
+
+stdb.py reads STDB_URL, STDB_DB and STDB_TOKEN from real environment variables first, then from STDB_* lines in `.env`. With neither, it uses local http://127.0.0.1:3000.
+
+### curl
+
+Read. The body is the raw SQL string:
+
+```
+curl -s -X POST https://maincloud.spacetimedb.com/v1/database/home/sql -H 'Content-Type: text/plain' --data "SELECT url, title FROM health_source WHERE hazard = 'cockroaches'"
+```
+
+The response is a JSON array with one object per statement: `schema.elements` holds the column names and `rows` holds arrays in column order.
+
+Write. The body is a JSON array of reducer arguments in contract order. This writes a real row and there is no delete, so only run it with a case_id you mean:
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/save_assessment -H 'Content-Type: application/json' --data '["case_001","dampness_mold","{\"hazard\":\"dampness_mold\"}"]'
+```
+
+HTTP 200 means committed. HTTP 530 means the reducer rejected it, with the reason in the body.
+
+### Rules
+
+- Writes go through reducers only (add_source, add_chunk, save_assessment).
+- New tables or reducers: send the shape to Rabah. One module, one owner, one publish.
+- Never republish with `--delete-data`. It wipes every table, assessments included, with no undo.
+- No tokens in the repo. STDB_TOKEN is only for Rabah's owner operations (publish, logs).
+- Demo data only. Every table is public (see Production items).
+- Timestamps come back as `[microseconds since epoch]` (contracts.md section 4).
 
 ## Log
 
@@ -98,17 +149,32 @@ Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fi
 - Fingerprinted, stopped the server with Ctrl+C (ping: connection refused), ran `spacetime start`, fingerprinted again. Identical: 15 sources, 110 chunks, 0 assessments, same hashes.
 - Data lives in ~/.local/share/spacetime/data (15 MB). Caveat: health_assessment was empty during the test. Same database and storage, but only sources and chunks were proven with real rows.
 
+### Step 7: move to Maincloud (5:47 to 6:00 PM)
+- `spacetime logout` then `spacetime login` (GitHub). The morning's local publish had auto-created a server-only identity, so the CLI was not linked to the web account.
+- `GET /v1/database/home` returned 404, so published as `home` with `--yes=remote` and no `--delete-data`.
+- Rebuilt with `STDB_URL=https://maincloud.spacetimedb.com ingest.py --from-cache`: 15 sources / 110 chunks, same per-hazard counts as local.
+- curl with no token: SQL read OK, reducer upsert HTTP 200, bad hazard HTTP 530 with the module's error, counts unchanged.
+- agents/health/evals.py against Maincloud: 9/9 pass. The evals read the corpus but save nothing (`save=False`).
+- Gotcha: appending to `.env` with printf glued text onto ANTHROPIC_API_KEY because `.env` had no trailing newline. Repaired and verified. Check the trailing newline before appending.
+- Gotcha: zsh globs an unquoted `--include=*.py`. Quote it.
+- After the re-login the CLI may no longer own the local `home`. Local reads still work. To republish locally, use a new local name and `--from-cache`.
+
+## Production items (not this weekend)
+- Open writes: every reducer accepts anonymous callers, so anyone with the URL can add sources, chunks or assessments.
+- Open reads: health_assessment is public, so tenant case data would be readable by anyone with the URL.
+- Fix: private assessment table, auth on the HTTP API, reducers check `ctx.sender` against an allowlist, client visibility filters for per-tenant rows.
+
 ## Next (after the gate)
-- Team sync decision: how other laptops reach the database (LAN listen or publish to maincloud). See the open question above.
+- Done: shared database on Maincloud (see How to connect).
 - Add a dedicated cockroach source and an indoor electrical safety source. Each of those hazards rests on one multi-topic page right now.
 - More California sources (CDPH, HUD Healthy Homes) for the Oakland + California pack.
 
 ## Limits, cost, time
 
-- Time: about 1 hour (8:50 to 9:52), all six steps.
+- Time: about 1 hour (8:50 to 9:52), all six steps. Maincloud move: about 15 minutes (5:47 to 6:00 PM).
 - `spacetime call`, `sql` and `describe` print an UNSTABLE warning on every run. They work, but the CLI output format could change.
 - There is no delete reducer (none in the contract). The only way to wipe is `spacetime publish --delete-data=always`, which clears all three tables, including health_assessment. Do not run it once other agents are saving assessments.
-- The database runs on one laptop. If that laptop sleeps or the server tab closes, everyone loses reads until it restarts. The data survives (step 5), and `ingest.py --from-cache` rebuilds it anywhere in about 10 seconds.
+- Local is now only a fallback. If Maincloud is unreachable, set `STDB_URL=http://127.0.0.1:3000` and run `ingest.py --from-cache` for a local copy in about 10 seconds.
 - Apify: 2 crawl runs of 15 to 16 pages, $0.0048 and $0.0046, free plan. Reloads from cache cost nothing.
 - SpacetimeDB: $0, local.
 

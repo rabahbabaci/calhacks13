@@ -3,13 +3,32 @@
 call_reducer(name, args) -> POST /v1/database/<db>/call/<name>, body = JSON array of positional args
 sql(query)               -> POST /v1/database/<db>/sql, returns list of row dicts
 
-Config via env: STDB_URL (default http://127.0.0.1:3000), STDB_DB (default home),
-STDB_TOKEN (optional; sent as Bearer. Local server allows anonymous access to public tables).
+Config: STDB_URL (default http://127.0.0.1:3000), STDB_DB (default home), STDB_TOKEN (optional, sent as Bearer).
+Read from real environment variables first, then from STDB_* lines in the repo-root .env. Only STDB_* keys are read.
+Shared team db: STDB_URL=https://maincloud.spacetimedb.com (no token needed for reads or reducer calls).
 """
 import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+
+def _load_dotenv():
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if not env.exists():
+        return
+    for line in env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        if key.startswith("STDB_") and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
+_load_dotenv()
 
 BASE_URL = os.environ.get("STDB_URL", "http://127.0.0.1:3000").rstrip("/")
 DATABASE = os.environ.get("STDB_DB", "home")
