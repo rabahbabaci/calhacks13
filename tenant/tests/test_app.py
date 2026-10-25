@@ -1291,3 +1291,59 @@ def test_dev_login_flag_decides_the_fallback(monkeypatch):
     assert AppState(google_client_id=CLIENT_ID).dev_login is True
     monkeypatch.setenv("HOME_DEV_LOGIN", "0")
     assert AppState(google_client_id="").dev_login is False
+
+
+def _raw(client, method, path, headers=None):
+    req = Request(client.base + path, headers=headers or {}, method=method)
+    try:
+        res = urlopen(req)
+    except HTTPError as err:
+        res = err
+    with res:
+        return res.status, dict(res.headers), res.read()
+
+
+def test_session_cookie_is_secure_only_behind_https(api):
+    client, _state = api
+    _status, headers, _body = _raw(client, "POST", "/api/dev/login")
+    assert "Secure" not in headers["Set-Cookie"]
+    assert "HttpOnly" in headers["Set-Cookie"]
+    _status, headers, _body = _raw(client, "POST", "/api/dev/login", {"X-Forwarded-Proto": "https"})
+    assert "; Secure" in headers["Set-Cookie"]
+    _status, headers, _body = _raw(client, "POST", "/api/auth/logout", {"X-Forwarded-Proto": "https", "Cookie": headers["Set-Cookie"].split(";", 1)[0]})
+    assert "Max-Age=0" in headers["Set-Cookie"]
+    assert "; Secure" in headers["Set-Cookie"]
+
+
+def test_built_web_app_is_served_with_index_fallback(api, tmp_path, monkeypatch):
+    import tenant.server as server
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>Goldilocks</title>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    monkeypatch.setattr(server, "DIST", dist)
+    client, _state = api
+    status, headers, body = _raw(client, "GET", "/")
+    assert status == 200
+    assert b"Goldilocks" in body
+    assert headers["Content-Type"].startswith("text/html")
+    status, headers, body = _raw(client, "GET", "/assets/app.js")
+    assert status == 200
+    assert b"console" in body
+    assert "immutable" in headers["Cache-Control"]
+    status, _headers, body = _raw(client, "GET", "/tracking")
+    assert status == 200
+    assert b"Goldilocks" in body
+    status, _headers, body = _raw(client, "GET", "/../../etc/passwd")
+    assert status == 200
+    assert b"Goldilocks" in body
+    status, _headers, _body = _raw(client, "GET", "/api/nope")
+    assert status == 401
+
+
+def test_api_only_when_no_dist(api, tmp_path, monkeypatch):
+    import tenant.server as server
+    monkeypatch.setattr(server, "DIST", tmp_path / "missing")
+    client, _state = api
+    status, _headers, _body = _raw(client, "GET", "/")
+    assert status == 401

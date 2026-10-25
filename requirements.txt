@@ -1,0 +1,8 @@
+# Everything the tenant server and the in-process agents import. Used by the Dockerfile (Railway).
+# Pinned to the versions verified on Oct 25 (wheels exist for python 3.13 on manylinux).
+# Local development keeps using data/.venv with the per-folder requirements files.
+anthropic==2.3.0
+apify-client==3.3.0
+google-auth==2.62.0
+requests==2.34.2
+pillow==12.2.0
