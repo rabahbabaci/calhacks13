@@ -2,11 +2,13 @@
 
 Running log for the SpacetimeDB module and the health corpus ingest. Updated with every commit from this workstream.
 
-## Status (Sat Oct 24, 6:00 PM PT)
+## Status (Sat Oct 24, 6:35 PM PT)
 
 | Item | State |
 |---|---|
 | Shared team db (Maincloud) | Live: https://maincloud.spacetimedb.com, database `home`, 15 sources / 110 chunks |
+| Live core tables (section 6) | Live: case_file, hazard, agent_run + 6 reducers, 11/11 tests, health agent records runs |
+| Legal tables (section 7) | Live: legal_source + add_legal_source (Ansh, PR #1) |
 | SpacetimeDB module `home` | Live on Rabah's laptop, schema matches docs/contracts.md section 4 |
 | data/stdb.py (Python client) | Working: reads, writes, error handling tested |
 | urls.csv validation | Done: 16 of 17 valid, 8 hazards covered (no gas_leak) |
@@ -87,6 +89,52 @@ curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/
 
 HTTP 200 means committed. HTTP 530 means the reducer rejected it, with the reason in the body.
 
+### Live core: cases, hazards, agent runs (contracts.md section 6)
+
+Reducers (all positional JSON arrays, in this order):
+- `create_case(case_id, address, payload_json)`: upsert
+- `add_hazard(case_id, hazard, location, confidence, evidence_ids_json)`: case must exist, tag must be valid, confidence 0 to 1, evidence_ids_json a JSON array
+- `confirm_hazard(id, confirmed)`: the tenant's yes/no
+- `start_run(case_id, agent, hazard)`: creates the row or resets it to running (payload and error cleared)
+- `finish_run(case_id, agent, hazard, payload_json)`: running to done
+- `fail_run(case_id, agent, hazard, error)`: running to failed
+- Agents: hazard, health, property, legal, packet, action. Use `""` as hazard for case-level agents.
+- Also live: `add_legal_source(url, cite, kind, jurisdiction, excerpt, verified)` (Ansh, section 7), plus the health reducers above.
+
+Start and finish a run. These use `case_example` so a copy-paste never resets a real case:
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/create_case -H 'Content-Type: application/json' --data '["case_example","123 Example St, Oakland, CA 94612","{\"case_id\":\"case_example\"}"]'
+```
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/start_run -H 'Content-Type: application/json' --data '["case_example","property",""]'
+```
+
+```
+curl -s -w '\nHTTP %{http_code}\n' -X POST https://maincloud.spacetimedb.com/v1/database/home/call/finish_run -H 'Content-Type: application/json' --data '["case_example","property","","{\"owner_records\":[]}"]'
+```
+
+From Python: `call_reducer("start_run", [case_id, "property", ""])`, then `call_reducer("finish_run", [case_id, "property", "", json.dumps(output)])`, or `fail_run` with the error string.
+
+UI subscriptions:
+
+```
+SELECT * FROM hazard WHERE case_id = 'case_demo_001'
+```
+
+```
+SELECT * FROM agent_run WHERE case_id = 'case_demo_001'
+```
+
+Same queries work as one-off reads over `/sql`.
+
+Known gaps:
+- `pending` is a valid status, but no reducer writes it. A run row only appears at `start_run`.
+- Hazard rows only appear when someone calls `add_hazard` (the hazard detection agent, #1). The health agent reads hazards from the case input, so case_demo_001 has agent_run rows but no hazard rows yet.
+
+Test everything end to end: `bash data/test_core.sh https://maincloud.spacetimedb.com home` (11 checks, writes to `case_core_test` only).
+
 ### Rules
 
 - Writes go through reducers only (add_source, add_chunk, save_assessment).
@@ -158,6 +206,14 @@ Thin spots: cockroaches and exposed_wiring each rest on one multi-topic page. Fi
 - Gotcha: appending to `.env` with printf glued text onto ANTHROPIC_API_KEY because `.env` had no trailing newline. Repaired and verified. Check the trailing newline before appending.
 - Gotcha: zsh globs an unquoted `--include=*.py`. Quote it.
 - After the re-login the CLI may no longer own the local `home`. Local reads still work. To republish locally, use a new local name and `--from-cache`.
+
+### Step 8: live core tables + legal merge (6:11 to 6:35 PM)
+- Section 6 was not on main at first (the planning chat drafted it but never committed). Committed it as d730d66 before writing code.
+- Added case_file, hazard, agent_run and the 6 reducers. Tested on a fresh local db `home-dev` first, then published to Maincloud without `--delete-data`. The migration plan showed only created tables; corpus stayed at 15 / 110.
+- data/test_core.sh: 11 curl checks (happy path, reset and fail lifecycle, 4 rejections). 11/11 on local and on Maincloud.
+- Ansh's PR #1 (legal agent) conflicted on the module and contracts. He merged main and redesigned to use agent_run for results, keeping only `legal_source`. Tested his branch in a temporary worktree (30/30 unit tests, typecheck, section 6 regression 11/11, 4 add_legal_source checks), merged, published.
+- Health agent: start_run / finish_run / fail_run per assessed hazard, creates case_file if missing, still saves health_assessment. Evals 9/9 with save=False (no writes). Real run on case_demo_001: 3 hazards, 3 runs done, 0 dropped.
+- Only the module owner can publish `home`, so a teammate's branch can never change Maincloud by accident.
 
 ## Production items (not this weekend)
 - Open writes: every reducer accepts anonymous callers, so anyone with the URL can add sources, chunks or assessments.
