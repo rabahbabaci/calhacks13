@@ -124,7 +124,7 @@ function bounds(pts: [number, number][]) {
   return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
 }
 
-function mat(color: string, extras: Record<string, number | boolean> = {}) {
+function mat(color: string, extras: Record<string, number | boolean | string> = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.72, ...extras });
 }
 
@@ -264,7 +264,7 @@ function wallOf(pts: [number, number][], x: number, z: number) {
 }
 
 function addStain(
-  scene: THREE.Scene,
+  scene: InstanceType<typeof THREE.Scene>,
   targets: { userData: { hid?: string } }[],
   hid: string,
   color: string,
