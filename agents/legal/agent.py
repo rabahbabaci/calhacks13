@@ -129,14 +129,16 @@ Claims:
 
 Process: you have a budget of {budget} searches and page reads (pages that fail to load don't count). Then call submit_assessment exactly once with the full object."""
 
-CLAIM_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {"text": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "string"}}},
-        "required": ["text", "source_ids"],
-    },
-}
+def claim_schema():
+    """A fresh schema for one claim list (each tool field gets its own copy)."""
+    return {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "string"}}},
+            "required": ["text", "source_ids"],
+        },
+    }
 
 TOOLS = [
     {
@@ -167,7 +169,7 @@ TOOLS = [
     {
         "name": "submit_assessment",
         "description": "Submit the finished assessment. Each claim is {text, source_ids}.",
-        "input_schema": {"type": "object", "properties": dict.fromkeys(CLAIM_FIELDS, CLAIM_SCHEMA), "required": CLAIM_FIELDS},
+        "input_schema": {"type": "object", "properties": {field: claim_schema() for field in CLAIM_FIELDS}, "required": CLAIM_FIELDS},
     },
 ]
 
