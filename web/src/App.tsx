@@ -726,6 +726,7 @@ export function App() {
   const [screen, setScreen] = useState<Screen>("model");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [mailChecked, setMailChecked] = useState(0);
   // After "This is in my home": a pop-up pointing at the next step. null = hidden.
   const [nudge, setNudge] = useState<{ tileId: string } | null>(null);
   const [address, setAddress] = useState("");
@@ -759,7 +760,10 @@ export function App() {
     if (!token) return;
     try {
       const messages = await listLandlordMail(token, addresses, new Date(mailTime(first)));
+      setMailChecked(Date.now());
       if (!messages.length) return;
+      const known = new Set((current?.tracking?.messages || []).map((m) => m.id));
+      if (!messages.some((m) => !known.has(m.gmail_id))) return;
       setHome(await api.mail(messages));
     } catch {
       return;
@@ -1039,12 +1043,15 @@ export function App() {
   const analyzing = Boolean(home?.analyzing);
   const hasCase = Boolean(home && !home.needs_onboarding && home.layout);
   const mailKey = home && hasCase ? landlordEmails(home, to).join(",") : "";
+  const mailThread = threadMessages(home?.tracking?.messages);
+  // A reply is awaited when the last mail in the thread is ours: check the inbox every 8 s then, 30 s otherwise.
+  const awaitingReply = mailThread.length > 0 && mailThread[mailThread.length - 1].direction === "out";
   useEffect(() => {
     if (!hasCase || !mailKey) return;
     syncLandlordMail();
-    const timer = window.setInterval(() => { syncLandlordMail(); }, 30000);
+    const timer = window.setInterval(() => { syncLandlordMail(); }, awaitingReply ? 8000 : 30000);
     return () => window.clearInterval(timer);
-  }, [hasCase, mailKey, screen]);
+  }, [hasCase, mailKey, awaitingReply]);
   const showAnalyze = analyzing && (screen === "model" || screen === "case");
   const showModel = hasCase && screen === "model" && !analyzing;
   const showCase = hasCase && screen === "case" && !analyzing;
@@ -1269,7 +1276,7 @@ export function App() {
             ))}
             {(home.tracking?.evidence || []).length === 0 && <p className="note">No extra evidence yet.</p>}
             <h2>Correspondence</h2>
-            <Correspondence messages={home.tracking?.messages} />
+            <Correspondence messages={home.tracking?.messages} tenant={home.name || ""} checked={mailChecked} awaiting={awaitingReply} />
           </section>
         )}
       </main>
@@ -1494,7 +1501,50 @@ function StepsPage({
   );
 }
 
-function Correspondence({ messages }: { messages?: Message[] }) {
+function mailWhen(value?: string) {
+  const raw = value || "";
+  if (!raw || raw === "just now") return "just now";
+  const stamp = Date.parse(raw);
+  if (!Number.isFinite(stamp)) return raw;
+  return new Date(stamp).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** Gmail snippets carry the quoted original after "On <date> ... wrote:"; show only what the person wrote. */
+function replyText(body: string) {
+  const cut = body.search(/\bOn (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)[^]{0,160}?\bwrote:/);
+  const own = (cut >= 0 ? body.slice(0, cut) : body).trim();
+  return own || body.trim();
+}
+
+function MailTile({ item, tenant }: { item: Message; tenant: string }) {
+  const [open, setOpen] = useState(false);
+  const sent = item.direction === "out";
+  const text = sent ? (item.body || "") : replyText(item.body || "");
+  const long = text.length > 260;
+  const shown = long && !open ? text.slice(0, 260).replace(/\s+\S*$/, "") + "…" : text;
+  return (
+    <div className={"chat-row " + (sent ? "is-sent" : "is-received")}>
+      <div className="chat-who">
+        <span className="chat-avatar" aria-hidden="true">{sent ? "You" : "LL"}</span>
+        <span>
+          <strong>{sent ? (tenant || "You") : "Landlord"}</strong>
+          <small>{sent ? `to ${item.counterparty}` : item.counterparty} · {mailWhen(item.at)}</small>
+        </span>
+      </div>
+      <div className="chat-bubble">
+        <p className="chat-subject">{(item.subject || "(no subject)").replace(/^(re:\s*)+/i, sent ? "" : "Re: ")}</p>
+        {shown ? <p className="mail-body">{shown}</p> : null}
+        {long && (
+          <button type="button" className="chat-more" onClick={() => setOpen(!open)}>
+            {open ? "Show less" : sent ? "Show the full letter" : "Show the full reply"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Correspondence({ messages, tenant, checked, awaiting }: { messages?: Message[]; tenant: string; checked: number; awaiting: boolean }) {
   const thread = threadMessages(messages);
   if (!thread.length) {
     return (
@@ -1506,19 +1556,17 @@ function Correspondence({ messages }: { messages?: Message[] }) {
   }
   return (
     <>
-      <p className="note">Each tile is one email after your first notice. Sent, then received, then sent, then received.</p>
-      {thread.map((item) => (
-        <article key={item.id} className={"mail-tile " + (item.direction === "out" ? "is-sent" : "is-received")}>
-          <header>
-            <p className="step-kicker">{item.direction === "out" ? "Sent" : "Received"}</p>
-            <span className={"status" + (item.direction === "out" ? " is-done" : "")}>{item.status}</span>
-          </header>
-          <h2>{item.subject || "(no subject)"}</h2>
-          <p className="note">{item.direction === "out" ? "To" : "From"} {item.counterparty}</p>
-          {item.body ? <p className="mail-body">{item.body}</p> : null}
-          <p className="cite">{item.at}</p>
-        </article>
-      ))}
+      <p className="note">Your notice and every reply after it, in order. Replies are read from your Gmail.</p>
+      <div className="chat-thread">
+        {thread.map((item) => <MailTile key={item.id} item={item} tenant={tenant} />)}
+      </div>
+      {awaiting && (
+        <p className="note chat-live">
+          <span className="chat-dot" aria-hidden="true" />
+          Waiting for the landlord. Your inbox is checked every few seconds
+          {checked ? `, last at ${new Date(checked).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : ""}.
+        </p>
+      )}
     </>
   );
 }

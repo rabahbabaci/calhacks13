@@ -86,21 +86,34 @@ export function mailtoHref(to: string, subject: string, body: string) {
   return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
 }
 
-export function gmailRaw(to: string, subject: string, body: string) {
-  const message = [
-    `To: ${to}`,
-    `Subject: ${subject.replace(/\r?\n/g, " ")}`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=utf-8",
-    "",
-    body,
-  ].join("\r\n");
-  const bytes = new TextEncoder().encode(message);
+function base64Utf8(text: string) {
+  const bytes = new TextEncoder().encode(text);
   let binary = "";
   bytes.forEach((code) => {
     binary += String.fromCharCode(code);
   });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary);
+}
+
+/** RFC 2047 encoded-word, so an em dash or accent in the subject survives every mail client. */
+function encodeHeader(value: string) {
+  const flat = value.replace(/\r?\n/g, " ");
+  // eslint-disable-next-line no-control-regex
+  return /^[\x20-\x7e]*$/.test(flat) ? flat : `=?utf-8?B?${base64Utf8(flat)}?=`;
+}
+
+export function gmailRaw(to: string, subject: string, body: string) {
+  // Body goes base64 too: a bare 8-bit body with no transfer encoding is what mangles accents and dashes.
+  const message = [
+    `To: ${to}`,
+    `Subject: ${encodeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Utf8(body).replace(/(.{76})/g, "$1\r\n"),
+  ].join("\r\n");
+  return base64Utf8(message).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export async function sendThroughGmail(accessToken: string, to: string, subject: string, body: string) {
