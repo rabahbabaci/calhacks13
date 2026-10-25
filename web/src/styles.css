@@ -137,6 +137,20 @@ main > h2, section > h2, .section-title { font-size: 22px; margin: 20px 0 8px; }
 .field input { min-height: 44px; padding: 10px 12px; border-radius: 8px; border: 1px solid #8a8a83; background: var(--surface); font-weight: 400; }
 .field input[type="file"] { padding: 8px; }
 
+/* Address suggestions under the onboarding input */
+.suggest { position: relative; }
+.suggest input { width: 100%; }
+.suggest-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20;
+  margin: 0; padding: 6px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(26, 26, 26, 0.12);
+}
+.suggest-list li { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-weight: 400; }
+.suggest-list li strong { font-weight: 600; font-size: 15px; color: var(--ink); }
+.suggest-list li span { font-size: 13px; color: var(--muted); }
+.suggest-list li.is-active { background: var(--sunk); }
+
 /* Status words */
 .status.is-done, .status.is-ready { color: var(--ok); font-weight: 600; }
 .status.is-running { color: var(--ink); font-weight: 600; }
