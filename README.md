@@ -301,3 +301,7 @@ Everything the app shows is general information, not legal or medical advice.
 
 - The vision evals use a third-party apartment walkthrough from YouTube (https://www.youtube.com/watch?v=wFxmYq9wCWM). It belongs to its creator, is downloaded locally with yt-dlp, and is not stored in this repo.
 - Logos in the architecture diagram belong to their owners.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Third-party footage and logos keep their own terms.
